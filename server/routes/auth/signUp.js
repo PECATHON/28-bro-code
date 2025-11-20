@@ -1,6 +1,7 @@
 // routes/auth/signUp.js
 import { Router } from "express";
-import supabaseAdmin from "../../db.js"; // Using service role for admin operations
+// IMPORTANT: import the admin client (service role) — NOT the anon client
+import supabaseAdmin from "../../db_admin.js";
 
 const router = Router();
 
@@ -15,7 +16,6 @@ router.post("/signup", async (req, res) => {
       return res.status(403).json({ message: "Admin cannot sign up here" });
     }
 
-    // If vendor we require shop_name (or at least warn)
     if (role === "vendor" && (!shop_name || !shop_name.trim())) {
       return res.status(400).json({ message: "shop_name is required for vendor signup" });
     }
@@ -28,14 +28,22 @@ router.post("/signup", async (req, res) => {
       user_metadata: { full_name }
     });
 
-    if (error) return res.status(400).json({ message: error.message });
+    if (error) {
+      console.error("createUser error:", error);
+      // handle duplicate email more clearly
+      if (error.code === "email_exists" || error.status === 422) {
+        return res.status(409).json({ message: "Email already registered", code: "email_exists" });
+      }
+      return res.status(400).json({ message: error.message, code: error.code });
+    }
 
     const user = data.user;
     if (!user?.id) {
+      console.error("createUser returned no user:", data);
       return res.status(500).json({ message: "Failed to create user" });
     }
 
-    // 2. Create profile row
+    // 2. Create profile row (service role client bypasses RLS)
     const profileRow = {
       id: user.id,
       full_name,
@@ -57,6 +65,7 @@ router.post("/signup", async (req, res) => {
 
     if (profileError) {
       console.error("profiles insert error:", profileError);
+      // Attempt to roll back user creation? (optional)
       return res.status(500).json({
         message: "Failed to create profile",
         dbError: profileError.message ?? profileError,
@@ -66,7 +75,6 @@ router.post("/signup", async (req, res) => {
 
     // 3. Vendor table row (if vendor)
     let vendorRow = null;
-
     if (role === "vendor") {
       const { data: vendorData, error: vendorError } = await supabaseAdmin
         .from("vendors")
@@ -86,8 +94,7 @@ router.post("/signup", async (req, res) => {
 
       if (vendorError) {
         console.error("vendor insert error:", vendorError);
-        // Don't fail the request, but log it
-        console.warn("Profile created but vendor table insert failed");
+        // do not fail the whole signup if vendor row fails; log and continue
       } else {
         vendorRow = vendorData;
       }
@@ -101,7 +108,7 @@ router.post("/signup", async (req, res) => {
     });
   } catch (err) {
     console.error("signup error:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    return res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 

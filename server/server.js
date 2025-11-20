@@ -10,6 +10,7 @@ import authRoutes from "./routes/auth/index.js";
 import vendorRoutes from "./routes/auth/vendors.js";
 import vendorRegisterRoute from "./routes/vendor/registerVendor.js";
 import menuRoutes from "./routes/menu.js"; // Full CRUD menu routes
+import getVendors from "./routes/getVendors.js";
 
 
 const app = express();
@@ -39,7 +40,8 @@ app.use(cors(corsOptions));
 
 // ROUTES
 app.use("/api/auth", authRoutes);
-app.use("/api/vendors", vendorRoutes);
+app.use("/api/vendors", getVendors); // GET /api/vendors/items (MUST come before vendorRoutes - more specific route first)
+app.use("/api/vendors", vendorRoutes); // GET /api/vendors/:vendorId
 app.use("/api/menu", menuRoutes); // Full CRUD: GET, POST, PUT, DELETE, import, export, upload
 app.use("/api/vendor", vendorRegisterRoute);
 

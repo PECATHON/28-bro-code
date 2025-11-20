@@ -9,7 +9,7 @@ import { Router } from "express";
 import supabase from "../db.js";
 import supabaseAdmin from "../db_admin.js";
 import fs from "fs";
-import csvParse from "csv-parse/lib/sync";
+import { parse } from "csv-parse/sync";
 import multer from "multer";
 import path from "path";
 import os from "os";
@@ -81,7 +81,7 @@ router.post("/:vendorId/import", async (req, res) => {
       return res.status(400).json({ message: "Provide filepath or csvText" });
     }
 
-    const records = csvParse(content, { columns: true, skip_empty_lines: true });
+    const records = parse(content, { columns: true, skip_empty_lines: true });
     if (!Array.isArray(records) || records.length === 0) {
       return res.status(400).json({ message: "No records found in CSV" });
     }

@@ -7,12 +7,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthContext } from '../contexts/AuthContext';
 import StudentStackNavigator from './StudentStackNavigator';
 
-// Auth + Student screens
+// Auth screens
 import LoginScreen from '../screens/Auth/LoginScreen';
 import RegisterScreen from '../screens/Auth/RegisterScreen';
-import StudentTabs from './StudentTabs'; // or your existing StudentTabs implementation
-import VendorScreen from '../screens/Student/VendorScreen';
-import CheckoutScreen from '../screens/Student/CheckoutScreen';
 
 // Vendor navigator
 import VendorTabs from './VendorNavigator';

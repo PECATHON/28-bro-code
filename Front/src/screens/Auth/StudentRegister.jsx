@@ -12,7 +12,7 @@ import {
 import * as SecureStore from "expo-secure-store";
 import { AuthContext } from "../../contexts/AuthContext";
 
-const BACKEND_BASE = "http://172.31.68.164:3000";
+const BACKEND_BASE = "http://172.31.68.164:3000"; // update if your machine IP changed
 
 export default function StudentRegister({ navigation }) {
   const [name, setName] = useState("");
@@ -37,8 +37,10 @@ export default function StudentRegister({ navigation }) {
     }
 
     setLoading(true);
+
     try {
       // 1) Signup
+      console.log("[StudentRegister] calling signup", { email, name });
       const res = await fetch(`${BACKEND_BASE}/api/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -51,15 +53,20 @@ export default function StudentRegister({ navigation }) {
         })
       });
 
-      const signupPayload = await res.json().catch(() => null);
+      let signupPayload = null;
+      try { signupPayload = await res.json(); } catch (e) { signupPayload = null; }
+
+      console.log("[StudentRegister] signup response", res.status, signupPayload);
 
       if (!res.ok) {
-        Alert.alert("Signup failed", signupPayload?.message || "Please try again");
+        const message = signupPayload?.message || signupPayload?.error || `Signup failed (${res.status})`;
+        Alert.alert("Signup failed", message.toString());
         setLoading(false);
         return;
       }
 
-      // 2) Signin to obtain session + user + profile
+      // 2) Signin
+      console.log("[StudentRegister] calling signin");
       const signInRes = await fetch(`${BACKEND_BASE}/api/auth/signin`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -67,13 +74,26 @@ export default function StudentRegister({ navigation }) {
         body: JSON.stringify({ email, password })
       });
 
-      const signInPayload = await signInRes.json().catch(() => null);
+      let signInPayload = null;
+      try { signInPayload = await signInRes.json(); } catch (e) { signInPayload = null; }
 
-      if (!signInRes.ok || !signInPayload?.session?.access_token) {
-        // fallback: go to Login so user can sign in manually
+      console.log("[StudentRegister] signin response", signInRes.status, signInPayload);
+
+      if (!signInRes.ok) {
         Alert.alert(
           "Account created",
           "Automatic login failed. Please log in manually.",
+          [{ text: "OK", onPress: () => navigation.navigate("Login") }]
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (!signInPayload?.session?.access_token) {
+        console.warn("[StudentRegister] no access token in signin payload", signInPayload);
+        Alert.alert(
+          "Account created",
+          "No session token returned. Please login manually.",
           [{ text: "OK", onPress: () => navigation.navigate("Login") }]
         );
         setLoading(false);
@@ -87,7 +107,7 @@ export default function StudentRegister({ navigation }) {
         await saveToken("refresh_token", session.refresh_token);
       }
 
-      // 4) Update AuthContext with normalized user object
+      // 4) Update AuthContext
       const user = signInPayload.user || {};
       const profile = signInPayload.profile || null;
       const userData = {
@@ -98,24 +118,36 @@ export default function StudentRegister({ navigation }) {
         role: profile?.role ? profile.role.toLowerCase() : "student",
         profile,
         session,
-        // include any other user fields returned by backend
         ...user
       };
 
+      console.log("[StudentRegister] updating AuthContext with", userData);
       try {
         await updateUser(userData);
       } catch (e) {
         console.warn("updateUser failed:", e);
       }
 
-      // 5) Reset navigation to StudentApp (ensure StudentApp exists in root navigator)
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "StudentApp" }]
-      });
+      // 5) Navigate to StudentApp (reset history)
+      // Make sure your root navigator registers a route named "StudentApp"
+      try {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "StudentApp" }]
+        });
+      } catch (navErr) {
+        console.warn("navigation.reset failed:", navErr);
+        // fallback - try a plain navigate (will work if StudentApp is present)
+        try {
+          navigation.navigate("StudentApp");
+        } catch (n2) {
+          console.warn("navigation.navigate fallback failed:", n2);
+          Alert.alert("Navigation error", "Account created but app couldn't navigate to StudentHome. Please restart the app.");
+        }
+      }
     } catch (e) {
       console.error("student signup/signin error:", e);
-      Alert.alert("Network error", "Check Wi-Fi & backend connection");
+      Alert.alert("Network error", "Check Wi-Fi & backend connection. See console for details.");
     } finally {
       setLoading(false);
     }
