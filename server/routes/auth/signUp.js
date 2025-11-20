@@ -4,12 +4,6 @@ import supabase from "../../db.js";
 
 const router = Router();
 
-/**
- * POST /api/auth/signup
- * body: { email, password, full_name, role, phone, shop_name? }
- * role defaults to 'student'. 'vendor' will be created with vendor_status='pending'.
- * Admin creation is forbidden here.
- */
 router.post("/signup", async (req, res) => {
   try {
     const { email, password, full_name, role = "student", phone, shop_name } = req.body;
@@ -18,59 +12,77 @@ router.post("/signup", async (req, res) => {
       return res.status(400).json({ message: "email, password and full_name are required" });
     }
 
-    // Forbid public admin creation
     if (role === "admin") {
-      return res.status(403).json({ message: "Admin accounts must be created by an admin or secure script" });
+      return res.status(403).json({ message: "Admin cannot sign up here" });
     }
 
-    // Create auth user using server (service role) so we control profile insertion
+    // If vendor we require shop_name (or at least warn)
+    if (role === "vendor" && (!shop_name || !shop_name.trim())) {
+      return res.status(400).json({ message: "shop_name is required for vendor signup" });
+    }
+
+    // Create auth user using service/admin key
     const { data: createData, error: createError } = await supabase.auth.admin.createUser({
       email,
       password,
       user_metadata: { full_name },
-      email_confirm: true 
+      email_confirm: true
     });
 
     if (createError) {
       console.error("supabase.admin.createUser error:", createError);
-      return res.status(400).json({ message: createError.message ?? "Failed to create user" });
+      return res.status(400).json({ message: createError.message });
     }
 
     const user = createData?.user;
     if (!user?.id) {
-      return res.status(500).json({ message: "Failed to create user" });
+      console.error("user creation returned no id", createData);
+      return res.status(500).json({ message: "User creation failed" });
     }
 
-    // Prepare profile row
     const profileRow = {
       id: user.id,
       full_name,
       phone: phone || null,
       role,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     };
 
-    // Vendor-specific defaults
     if (role === "vendor") {
-      profileRow.vendor_status = "approved";
+      // Safer default: pending
+      profileRow.vendor_status = "pending";
       profileRow.shop_name = shop_name || null;
     }
 
-    const { error: profileError } = await supabase.from("profiles").insert([profileRow]);
+    // TRY inserting and capture the exact error
+    const { data: inserted, error: profileError } = await supabase
+      .from("profiles")
+      .insert([profileRow])
+      .select()
+      .single();
 
     if (profileError) {
       console.error("profiles insert error:", profileError);
-      return res.status(500).json({ message: "Failed to create profile", error: profileError.message ?? profileError });
+      // return the DB error message during development so you can see why it failed
+      return res.status(500).json({
+        message: "Failed to create profile",
+        dbError: profileError.message ?? profileError,
+        profileRow
+      });
     }
 
+    console.log("profile inserted:", inserted);
     return res.status(201).json({
-      message: role === "vendor" ? "Vendor signup received. Awaiting approval." : "Signup successful.",
+      message: role === "vendor"
+        ? "Vendor signup received (pending approval)"
+        : "Signup successful",
       user: { id: user.id, email: user.email },
-      profile: profileRow
+      profile: inserted
     });
+
   } catch (err) {
-    console.error("signup catch:", err);
-    return res.status(500).json({ message: "Signup failed" });
+    console.error("signup error:", err);
+    return res.status(500).json({ message: "Signup failed", error: err.message });
   }
 });
 
