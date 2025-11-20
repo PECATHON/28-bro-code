@@ -21,7 +21,7 @@ import { AuthContext } from "../../contexts/AuthContext";
  *
  * Replace the value below with the correct one for your setup.
  */
-const BACKEND_BASE = "http://172.31.68.164:3000";
+const BACKEND_BASE = "http://172.31.68.127:3000";
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");

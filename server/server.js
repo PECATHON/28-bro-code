@@ -6,6 +6,12 @@ import cookieParser from "cookie-parser";
 import "./db.js";
 import authRoutes from "./routes/auth/index.js";
 import menuRoute from "./routes/getMenu.js";
+import vendorRoute from "./routes/getVendors.js";
+import createOrder from "./routes/orders/createOrder.js";
+import getVendorOrders from "./routes/orders/getVendorOrders.js";
+import updateStatus from "./routes/orders/updateStatus.js";
+import getStudentOrders from "./routes/orders/getStudentOrders.js";
+
 //  172.31.68.127
 
 const app = express();
@@ -50,6 +56,11 @@ app.use(cors(corsOptions));
 // Mount routers
 app.use("/api/auth", authRoutes);
 app.use("/api/menu", menuRoute);
+app.use("/api/vendors", vendorRoute);
+app.use("/api/orders", createOrder); // POST /
+app.use("/api/orders", getVendorOrders); // GET /vendor/:vendor_id
+app.use("/api/orders", updateStatus); // PATCH /
+app.use("/api/orders", getStudentOrders); // GET /student/:user_id
 
 // Simple health route — optionally report supabase status if you want
 app.get("/health", (req, res) => {

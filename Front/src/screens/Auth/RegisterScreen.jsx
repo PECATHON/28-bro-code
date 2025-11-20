@@ -12,7 +12,7 @@ import {
 import * as SecureStore from "expo-secure-store";
 import { AuthContext } from "../../contexts/AuthContext";
 
-const BACKEND_BASE = "http://172.31.68.164:3000";
+const BACKEND_BASE = "http://172.31.68.127:3000";
 
 export default function RegisterScreen({ navigation }) {
   const [name, setName] = useState("");
