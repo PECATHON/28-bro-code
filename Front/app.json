@@ -26,6 +26,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+<<<<<<< HEAD
     }
   }
 }
+=======
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
+  }
+}
+>>>>>>> 9a038f3 (Initialised backend)
