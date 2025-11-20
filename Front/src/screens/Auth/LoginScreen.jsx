@@ -81,16 +81,21 @@ export default function LoginScreen({ navigation }) {
 
       // Update AuthContext with user data
       // Map API response to AuthContext format: { token, role, name, id, email, ... }
+      // IMPORTANT: Set role AFTER spread to ensure it's not overwritten
+      // Role comes from profile table, normalize to lowercase
       const userData = {
         token: session.access_token,
-        role: user?.role || profile?.role || null,
-        name: user?.name || profile?.name || user?.email?.split("@")[0] || "User",
+        name: profile?.full_name || user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User",
         id: user?.id || profile?.id || null,
         email: user?.email || email,
         ...user,
         profile,
         session,
+        // Set role AFTER spread to ensure it's not overwritten
+        role: profile?.role ? profile.role.toLowerCase() : null,
       };
+      
+      console.log("Login - Profile role:", profile?.role, "Final role:", userData.role);
 
       await updateUser(userData);
 

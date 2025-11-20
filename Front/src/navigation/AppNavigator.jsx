@@ -7,9 +7,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthContext } from '../contexts/AuthContext';
 import StudentStackNavigator from './StudentStackNavigator';
 
-// Auth screens
+// Auth + Student screens
 import LoginScreen from '../screens/Auth/LoginScreen';
 import RegisterScreen from '../screens/Auth/RegisterScreen';
+import StudentTabs from './StudentTabs'; // or your existing StudentTabs implementation
+import VendorScreen from '../screens/Student/VendorScreen';
+import CheckoutScreen from '../screens/Student/CheckoutScreen';
 
 // Vendor navigator
 import VendorTabs from './VendorNavigator';
@@ -25,6 +28,13 @@ export default function AppNavigator() {
       2) if role === 'vendor' -> Vendor flow
       3) otherwise -> Student flow (DEFAULT)
   */
+  
+  // Debug log to verify role routing
+  if (user) {
+    console.log("AppNavigator - User role:", user.role, "Type:", typeof user.role);
+    console.log("AppNavigator - Routing to:", user.role === 'vendor' ? 'VendorApp' : 'StudentApp');
+  }
+  
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>

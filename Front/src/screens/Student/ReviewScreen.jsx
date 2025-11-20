@@ -86,7 +86,7 @@ export default function ReviewScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account Actions</Text>
 
-          <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('ProfileEdit')}>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => Alert.alert('Edit Profile', 'Profile editing feature coming soon!')}>
             <Text style={styles.actionText}>Edit profile</Text>
           </TouchableOpacity>
 

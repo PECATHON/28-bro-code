@@ -96,12 +96,12 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.primaryText}>Go to {ROLE_LABELS[user.role]} Home</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.navigate('ProfileEdit')}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={() => Alert.alert('Edit Profile', 'Profile editing feature coming soon!')}>
             <Text style={styles.secondaryText}>Edit profile</Text>
           </TouchableOpacity>
 
           {user.role === 'vendor' && (
-            <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.navigate('VendorDashboard')}>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={() => goToRoleHome('vendor')}>
               <Text style={styles.secondaryText}>Open Vendor Dashboard</Text>
             </TouchableOpacity>
           )}
