@@ -1,13 +1,8 @@
+// routes/auth.js  (your posted file with minor fixes)
 import { Router } from "express";
-import supabase from "../../db.js";
-
+import supabase from "../../db.js"; // keep as you have
 const router = Router();
 
-/**
- * POST /api/auth/signin
- * body: { email, password }
- * Sets HttpOnly cookies for access and refresh tokens and returns user + profile.
- */
 router.post("/signin", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -31,24 +26,23 @@ router.post("/signin", async (req, res) => {
     const refreshToken = session.refresh_token;
 
     const isProd = process.env.NODE_ENV === "production";
-    // Set secure, HttpOnly cookies
+
+    // Set secure, HttpOnly cookies — these cookies are for Http-only session usage
     res.cookie("sb-access-token", accessToken, {
       httpOnly: true,
       secure: isProd,
       sameSite: "lax",
-      maxAge: session.expires_in ? session.expires_in * 1000 : 60 * 60 * 1000
+      maxAge: session.expires_in ? session.expires_in * 1000 : 60 * 60 * 1000,
     });
 
-    // Refresh token cookie (optional)
     res.cookie("sb-refresh-token", refreshToken, {
       httpOnly: true,
       secure: isProd,
       sameSite: "lax",
-      // keep reasonable lifetime; do not make infinite
-      maxAge: 7 * 24 * 60 * 60 * 1000
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    // Fetch profile row
+    // Fetch profile row (optional)
     const { data: profileData, error: profileError } = await supabase
       .from("profiles")
       .select("*")
@@ -57,10 +51,12 @@ router.post("/signin", async (req, res) => {
 
     if (profileError) {
       console.error("fetch profile error:", profileError);
-      // Return session & user; profile may be missing if DB row wasn't created
+      // Still return user & session — profile may be missing
+      console.log(user, session, null);
       return res.status(200).json({ user, session, warning: "Profile not found" });
     }
 
+    console.log(user, session, profileData);
     return res.json({ user, session, profile: profileData });
   } catch (err) {
     console.error("signin catch:", err);
@@ -68,20 +64,14 @@ router.post("/signin", async (req, res) => {
   }
 });
 
-/**
- * POST /api/auth/signout
- * Clears cookies from client.
- */
 router.post("/signout", async (req, res) => {
   try {
     // Clear cookies
     res.clearCookie("sb-access-token");
     res.clearCookie("sb-refresh-token");
 
-    // Optionally revoke session using access token from cookie/header
-    const token = req.cookies?.["sb-access-token"] || (req.headers.authorization || "").replace("Bearer ", "") || null;
-    if (token) {
-    }
+    // If you want to revoke server-side session: call Supabase signOut
+    // but usually clearing cookies + client tokens is sufficient for prototype.
 
     return res.json({ message: "Signed out" });
   } catch (err) {
