@@ -11,6 +11,7 @@ import vendorRoutes from "./routes/auth/vendors.js";
 import vendorRegisterRoute from "./routes/vendor/registerVendor.js";
 import menuRoutes from "./routes/menu.js"; // Full CRUD menu routes
 import getVendors from "./routes/getVendors.js";
+import getMenu from "./routes/getMenu.js";
 
 
 const app = express();
@@ -42,6 +43,7 @@ app.use(cors(corsOptions));
 app.use("/api/auth", authRoutes);
 app.use("/api/vendors", getVendors); // GET /api/vendors/items (MUST come before vendorRoutes - more specific route first)
 app.use("/api/vendors", vendorRoutes); // GET /api/vendors/:vendorId
+app.use("/api/menu", getMenu); // GET /api/menu/items?vendor_id=... (MUST come before menuRoutes - more specific route first)
 app.use("/api/menu", menuRoutes); // Full CRUD: GET, POST, PUT, DELETE, import, export, upload
 app.use("/api/vendor", vendorRegisterRoute);
 

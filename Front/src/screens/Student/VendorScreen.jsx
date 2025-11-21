@@ -8,34 +8,175 @@ import {
   StyleSheet,
   Image,
   SafeAreaView,
-  ScrollView
+  ScrollView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { CartContext } from '../../contexts/CartContext';
+import { getVendorImage } from '../../data/vendorImages';
+
+const BACKEND_BASE = "http://172.31.68.164:3000";
+
+// Helper function to get food image based on item name
+function getFoodImage(itemName, category = "") {
+  if (!itemName) return "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop";
+  
+  const name = itemName.toLowerCase();
+  const cat = category.toLowerCase();
+  
+  // Food image mapping based on keywords
+  const foodImages = {
+    // Burgers
+    burger: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&h=300&fit=crop",
+    // Pizza
+    pizza: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&h=300&fit=crop",
+    // Coffee/Drinks
+    coffee: "https://images.unsplash.com/photo-1511920170033-f8396924c348?w=400&h=300&fit=crop",
+    tea: "https://images.unsplash.com/photo-1556679343-c7306c1c58cf?w=400&h=300&fit=crop",
+    juice: "https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=400&h=300&fit=crop",
+    // Sandwiches
+    sandwich: "https://images.unsplash.com/photo-1539252554453-80ab65ce3586?w=400&h=300&fit=crop",
+    // Fries/Snacks
+    fries: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=400&h=300&fit=crop",
+    // Maggi/Noodles
+    maggi: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400&h=300&fit=crop",
+    noodles: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400&h=300&fit=crop",
+    // Desserts
+    dessert: "https://images.unsplash.com/photo-1551024506-0bccd828d307?w=400&h=300&fit=crop",
+    cake: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400&h=300&fit=crop",
+    // Indian Food
+    curry: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=400&h=300&fit=crop",
+    biryani: "https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=400&h=300&fit=crop",
+    // Fast Food
+    chicken: "https://images.unsplash.com/photo-1608039829577-8e72c0b89e58?w=400&h=300&fit=crop",
+    // General food fallback
+    default: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop",
+  };
+  
+  // Check for specific keywords in name
+  for (const [key, url] of Object.entries(foodImages)) {
+    if (name.includes(key) || cat.includes(key)) {
+      return url;
+    }
+  }
+  
+  // Use Foodish API for random food images (free API)
+  // Or use Unsplash with food search
+  const foodKeywords = ["food", "meal", "dish", "cuisine"];
+  const hasFoodKeyword = foodKeywords.some(kw => name.includes(kw) || cat.includes(kw));
+  
+  if (hasFoodKeyword) {
+    // Use Unsplash food search with item name
+    const searchTerm = encodeURIComponent(itemName.split(' ')[0]); // Use first word
+    return `https://source.unsplash.com/400x300/?food,${searchTerm}`;
+  }
+  
+  // Default food image
+  return foodImages.default;
+}
 
 export default function VendorScreen({ route, navigation }) {
-  const { vendorId } = route.params || {};
-  const [vendor, setVendor] = useState(null);
+  const { vendor } = route.params || {};
+  const [vendorData, setVendorData] = useState(null);
   const [menu, setMenu] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { addToCart, items } = useContext(CartContext);
 
-  useEffect(() => {
-    // Dummy data – replace with API later
-    setVendor({
-      id: vendorId || 'v1',
-      name: 'Canteen A',
-      rating: 4.3,
-      categories: ['Fast Food', 'Snacks'],
-      deliveryTime: 18,
-      image: 'https://placekitten.com/500/300',
-    });
+  // Use useFocusEffect to ensure we reload when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      const currentVendor = route.params?.vendor;
+      console.log("[VendorScreen] Screen focused, route params:", route.params);
+      console.log("[VendorScreen] Current vendor:", currentVendor);
+      
+      // Reset state
+      setMenu([]);
+      setLoading(true);
+      
+      if (currentVendor && currentVendor.id) {
+        console.log("[VendorScreen] Setting vendor data and fetching menu for:", currentVendor.id, currentVendor.name);
+        setVendorData(currentVendor);
+        fetchMenu(currentVendor.id);
+      } else {
+        console.error("[VendorScreen] No vendor or vendor.id found in route params");
+        setLoading(false);
+        setVendorData(null);
+      }
+    }, [route.params?.vendor?.id])
+  );
 
-    setMenu([
-      { id: 'm1', name: 'Veg Burger', price: 55, desc: 'Fresh bun, crispy patty', image: 'https://placekitten.com/400/280' },
-      { id: 'm2', name: 'Fries', price: 40, desc: 'Golden & crispy', image: 'https://placekitten.com/401/280' },
-      { id: 'm3', name: 'Cold Coffee', price: 60, desc: 'Chilled & creamy', image: 'https://placekitten.com/402/280' },
-    ]);
-  }, [vendorId]);
+  const fetchMenu = async (vendorId) => {
+    try {
+      setLoading(true);
+      // Use the /api/menu/:vendorId route which is more reliable
+      // This route filters by vendor_id and returns menu items directly
+      const url = `${BACKEND_BASE}/api/menu/${vendorId}`;
+      console.log("[VendorScreen] Fetching menu from:", url);
+      const res = await fetch(url);
+      
+      if (!res.ok) {
+        let errorMessage = "Failed to load menu";
+        try {
+          const payload = await res.json();
+          errorMessage = payload?.message || errorMessage;
+          console.error("[VendorScreen] Error response:", payload);
+        } catch (e) {
+          errorMessage = res.statusText || errorMessage;
+          console.error("[VendorScreen] Error parsing response:", e);
+        }
+        console.error("[VendorScreen] Menu fetch failed:", errorMessage, "Status:", res.status);
+        Alert.alert("Error", errorMessage);
+        setMenu([]);
+        return;
+      }
+      
+      const payload = await res.json();
+      console.log("[VendorScreen] Menu response:", payload);
+      // /api/menu/:vendorId returns an array directly
+      const menuItems = Array.isArray(payload) ? payload : (payload.items || []);
+      console.log("[VendorScreen] Menu items count:", menuItems.length);
+      // Normalize menu items to match expected format
+      const normalized = (menuItems || []).map((item) => {
+        const itemName = item.name || "Unnamed Item";
+        const itemCategory = item.category || "General";
+        // Use image_url if available, otherwise generate food image based on name/category
+        const itemImage = item.image_url || getFoodImage(itemName, itemCategory);
+        
+        return {
+          id: item.id,
+          name: itemName,
+          desc: item.description || "",
+          price: typeof item.price === "number" ? item.price : parseFloat(item.price) || 0,
+          image: itemImage,
+          category: itemCategory,
+          is_available: item.is_available !== false, // Default to true if not specified
+        };
+      });
+      console.log("[VendorScreen] Normalized menu items:", normalized);
+      setMenu(normalized);
+    } catch (err) {
+      console.error("[VendorScreen] Menu fetch error:", err);
+      Alert.alert("Network Error", "Unable to fetch menu items. Please try again.");
+      setMenu([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!vendorData) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#f7f3ec', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#c59d5f" />
+        <Text style={{ marginTop: 10, color: '#9aa1a9' }}>Loading vendor...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  const vendorImage = typeof vendorData.image === "string" 
+    ? { uri: vendorData.image } 
+    : vendorData.image || getVendorImage(vendorData.name);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f7f3ec' }}>
@@ -46,57 +187,78 @@ export default function VendorScreen({ route, navigation }) {
         </TouchableOpacity>
 
         {/* Banner */}
-        <Image source={{ uri: vendor?.image }} style={styles.banner} />
+        <Image source={vendorImage} style={styles.banner} />
 
         {/* Vendor Info */}
         <View style={styles.vendorInfoBox}>
-          <Text style={styles.vendorName}>{vendor?.name}</Text>
+          <Text style={styles.vendorName}>{vendorData.name}</Text>
 
           <View style={styles.row}>
             {/* Rating */}
             <View style={styles.ratingBadge}>
               <Ionicons name="star" size={14} color="#fff" />
-              <Text style={styles.ratingText}>{vendor?.rating}</Text>
+              <Text style={styles.ratingText}>{(vendorData.avg_rating || 0).toFixed(1)}</Text>
             </View>
 
             {/* Separator */}
             <Text style={styles.dot}>•</Text>
 
             {/* Categories */}
-            <Text style={styles.vendorMeta}>{vendor?.categories?.join(', ')}</Text>
+            <Text style={styles.vendorMeta}>{(vendorData.categories || ["General"]).join(', ')}</Text>
 
             <Text style={styles.dot}>•</Text>
 
             {/* Delivery Time */}
-            <Text style={styles.vendorMeta}>{vendor?.deliveryTime} mins</Text>
+            <Text style={styles.vendorMeta}>{vendorData.time || 15} mins</Text>
           </View>
         </View>
 
         {/* Menu Title */}
         <Text style={styles.menuTitle}>Menu</Text>
 
-        {/* Menu List */}
-        <FlatList
-          data={menu}
-          renderItem={({ item }) => (
-            <View style={styles.menuCard}>
-              <Image source={{ uri: item.image }} style={styles.menuImage} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.menuName}>{item.name}</Text>
-                <Text style={styles.menuDesc}>{item.desc}</Text>
-                <Text style={styles.menuPrice}>₹{item.price}</Text>
-                <TouchableOpacity
-                  style={styles.addBtn}
-                  onPress={() => addToCart({ ...item, vendorId: vendor.id })}
-                >
-                  <Text style={styles.addBtnText}>Add to Cart</Text>
-                </TouchableOpacity>
+        {/* Loading State */}
+        {loading ? (
+          <View style={{ padding: 20, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color="#c59d5f" />
+            <Text style={{ marginTop: 10, color: '#9aa1a9' }}>Loading menu...</Text>
+          </View>
+        ) : menu.length === 0 ? (
+          <View style={{ padding: 20, alignItems: 'center' }}>
+            <Text style={{ color: '#9aa1a9', fontSize: 16 }}>No menu items available</Text>
+          </View>
+        ) : (
+          /* Menu List */
+          <FlatList
+            data={menu}
+            renderItem={({ item }) => (
+              <View style={styles.menuCard}>
+                <Image 
+                  source={{ uri: item.image }} 
+                  style={styles.menuImage}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuName}>{item.name}</Text>
+                  <Text style={styles.menuDesc}>{item.desc || "No description available"}</Text>
+                  <Text style={styles.menuPrice}>₹{item.price.toFixed(2)}</Text>
+                  {item.is_available ? (
+                    <TouchableOpacity
+                      style={styles.addBtn}
+                      onPress={() => addToCart({ ...item, vendorId: vendorData.id })}
+                    >
+                      <Text style={styles.addBtnText}>Add to Cart</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={[styles.addBtn, { backgroundColor: '#9aa1a9' }]}>
+                      <Text style={styles.addBtnText}>Unavailable</Text>
+                    </View>
+                  )}
+                </View>
               </View>
-            </View>
-          )}
-          keyExtractor={(i) => i.id}
-          scrollEnabled={false}
-        />
+            )}
+            keyExtractor={(i) => i.id}
+            scrollEnabled={false}
+          />
+        )}
       </ScrollView>
 
       {/* Sticky Cart Button */}

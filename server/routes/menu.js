@@ -41,9 +41,33 @@ router.get("/export/:vendorId", async (req, res) => {
 /**
  * GET /api/menu/:vendorId
  * Public read of a vendor's menu
+ * NOTE: This route should NOT match "/items" - that should be handled by getMenu.js
  */
 router.get("/:vendorId", async (req, res) => {
   const { vendorId } = req.params;
+  console.log("[menu.js] Route /:vendorId hit with vendorId:", vendorId);
+  
+  // Prevent this route from matching "/items" - this should never happen if route order is correct
+  // Also check for other reserved paths
+  const reservedPaths = ["items", "export", "upload", "import"];
+  if (reservedPaths.includes(vendorId)) {
+    console.error("[menu.js] ERROR: Reserved path '", vendorId, "' was matched by /:vendorId route! Route order issue!");
+    return res.status(404).json({ 
+      message: `Route not found. '${vendorId}' is a reserved path.`,
+      hint: vendorId === "items" ? "Use /api/menu/items?vendor_id=..." : "Check route configuration"
+    });
+  }
+  
+  // Validate vendorId is a valid UUID format before querying
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(vendorId)) {
+    console.error("[menu.js] ERROR: Invalid UUID format:", vendorId);
+    return res.status(400).json({ 
+      message: "Invalid vendor ID format",
+      error: `'${vendorId}' is not a valid UUID`
+    });
+  }
+  
   try {
     const { data, error } = await supabase
       .from("menu_items")

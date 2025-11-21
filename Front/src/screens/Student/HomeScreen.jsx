@@ -16,7 +16,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 const BACKEND_BASE = "http://172.31.68.164:3000";
-import { vendorImages, FALLBACK_IMAGE } from "../../data/vendorImages";
+import { getVendorImage } from "../../data/vendorImages";
 
 function VendorCard({ vendor, onPress }) {
   return (
@@ -53,27 +53,46 @@ export default function HomeScreen({ navigation }) {
       setLoading(true);
       const url = `${BACKEND_BASE}/api/vendors/items?is_active=true&is_approved=true`;
       const res = await fetch(url);
-      const payload = await res.json();
+      
       if (!res.ok) {
-        Alert.alert("Fetch Error", payload?.message || "Failed to load vendors");
+        let errorMessage = "Failed to load vendors";
+        try {
+          const payload = await res.json();
+          errorMessage = payload?.message || errorMessage;
+        } catch (e) {
+          // If response is not JSON, use status text
+          errorMessage = res.statusText || errorMessage;
+        }
+        Alert.alert("Fetch Error", errorMessage);
         return;
       }
+      
+      const payload = await res.json();
       const raw = payload.vendors || [];
-      const normalized = raw.map((v) => ({
-        id: v.id,
-        name: v.name || v.shop_name || "Unknown Vendor",
-        description: v.description || "",
-        image: vendorImages[v.name || v.shop_name] || FALLBACK_IMAGE,
-        categories: ["General"],
-        avg_rating: typeof v.avg_rating === "number" ? v.avg_rating : 0,
-        time: 15,
-        location: v.location ?? {},
-        raw: v,
-      }));
+      const normalized = raw.map((v) => {
+        const vendorName = v.name || v.shop_name || "Unknown Vendor";
+        // Use flexible matching function to get the correct image
+        const vendorImage = getVendorImage(vendorName);
+        console.log(`[Vendor Image] "${vendorName}" -> matched`);
+        return {
+          id: v.id,
+          name: vendorName,
+          description: v.description || "",
+          image: vendorImage,
+          categories: ["General"],
+          avg_rating: typeof v.avg_rating === "number" ? v.avg_rating : 0,
+          time: 15,
+          location: v.location ?? {},
+          raw: v,
+        };
+      });
       setVendors(normalized);
     } catch (err) {
       console.error("Vendor fetch error:", err);
-      Alert.alert("Network Error", "Unable to fetch vendors. Check your backend.");
+      const errorMsg = err.message?.includes("Network request failed") 
+        ? "Unable to connect to server. Please check:\n• Backend server is running\n• Correct IP address in BACKEND_BASE\n• Device and server are on same network"
+        : "Unable to fetch vendors. Please try again.";
+      Alert.alert("Network Error", errorMsg);
     } finally {
       setLoading(false);
     }
@@ -89,7 +108,23 @@ export default function HomeScreen({ navigation }) {
     );
   }
 
-  const featured = vendors.slice(0, 2);
+  // Featured food items from internet
+  const featuredFoodItems = [
+    {
+      id: "featured-1",
+      name: "Delicious Burger",
+      description: "Juicy beef patty with fresh vegetables",
+      image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&h=300&fit=crop",
+      price: "$8.99",
+    },
+    {
+      id: "featured-2",
+      name: "Fresh Pizza",
+      description: "Wood-fired pizza with premium toppings",
+      image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&h=300&fit=crop",
+      price: "$12.99",
+    },
+  ];
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -137,25 +172,22 @@ export default function HomeScreen({ navigation }) {
 
         <Text style={styles.sectionTitle}>Featured</Text>
 
-        {loading && !vendors.length ? (
-          <ActivityIndicator style={{ marginVertical: 20 }} />
-        ) : (
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={featured}
-            keyExtractor={(i) => i.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.featuredCard} onPress={() => navigation.navigate("Vendor", { vendor: item })}>
-                <Image source={ typeof item.image === "string" ? { uri: item.image } : item.image } style={styles.featuredImage} />
-                <View style={styles.featuredMeta}>
-                  <Text style={styles.featuredName}>{item.name}</Text>
-                  <Text style={styles.featuredSub}>{item.categories.join(", ")} • {item.time ?? "—"} mins</Text>
-                </View>
-              </TouchableOpacity>
-            )}
-          />
-        )}
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={featuredFoodItems}
+          keyExtractor={(i) => i.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.featuredCard}>
+              <Image source={{ uri: item.image }} style={styles.featuredImage} />
+              <View style={styles.featuredMeta}>
+                <Text style={styles.featuredName}>{item.name}</Text>
+                <Text style={styles.featuredSub}>{item.description}</Text>
+                <Text style={styles.featuredPrice}>{item.price}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
 
         <Text style={[styles.sectionTitle, { marginTop: 14 }]}>All Vendors</Text>
 
@@ -165,7 +197,10 @@ export default function HomeScreen({ navigation }) {
           <FlatList
             data={filteredVendors()}
             keyExtractor={(i) => i.id}
-            renderItem={({ item }) => <VendorCard vendor={item} onPress={() => navigation.navigate("Vendor", { vendor: item })} />}
+            renderItem={({ item }) => <VendorCard vendor={item} onPress={() => {
+              console.log("[HomeScreen] Navigating to Vendor with:", item);
+              navigation.navigate("Vendor", { vendor: item });
+            }} />}
             contentContainerStyle={{ paddingBottom: 200 }} // <-- large bottom padding to keep buttons clickable
             ListEmptyComponent={<Text style={{ color: "#9aa1a9", marginTop: 20 }}>No vendors found</Text>}
           />
@@ -196,11 +231,12 @@ const styles = StyleSheet.create({
   categoryText: { color: palette.navy },
   categoryTextActive: { color: palette.cream, fontWeight: "700" },
   sectionTitle: { fontSize: 18, fontWeight: "700", marginVertical: 8, color: palette.navy },
-  featuredCard: { width: 240, marginRight: 12, borderRadius: 12, overflow: "hidden", backgroundColor: palette.card },
-  featuredImage: { width: "100%", height: 120 },
-  featuredMeta: { padding: 10 },
-  featuredName: { fontWeight: "700", fontSize: 16, color: palette.navy },
-  featuredSub: { color: palette.muted, marginTop: 4 },
+  featuredCard: { width: 300, marginRight: 16, borderRadius: 16, overflow: "hidden", backgroundColor: palette.card, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  featuredImage: { width: "100%", height: 180 },
+  featuredMeta: { padding: 14 },
+  featuredName: { fontWeight: "700", fontSize: 18, color: palette.navy },
+  featuredSub: { color: palette.muted, marginTop: 6, fontSize: 13 },
+  featuredPrice: { color: palette.gold, fontWeight: "700", marginTop: 8, fontSize: 18 },
   vendorCard: { flexDirection: "row", padding: 12, borderRadius: 12, backgroundColor: palette.card, marginBottom: 10, alignItems: "center" },
   vendorImage: { width: 86, height: 72, borderRadius: 10, marginRight: 12 },
   vendorInfo: { flex: 1 },
