@@ -52,7 +52,6 @@ export default function HomeScreen({ navigation }) {
 
   const fetchVendors = useCallback(async (isRefresh = false) => {
     try {
-<<<<<<< HEAD
       if (isRefresh) {
         setRefreshing(true);
       } else {

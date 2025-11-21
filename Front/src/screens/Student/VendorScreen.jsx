@@ -25,7 +25,6 @@ export default function VendorScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const { addToCart, items } = useContext(CartContext);
 
-<<<<<<< HEAD
   // Get vendor ID from vendor object or direct vendorId param
   const currentVendorId = vendor?.id || vendorId || vendorData?.id;
 
