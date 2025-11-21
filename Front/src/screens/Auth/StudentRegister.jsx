@@ -13,7 +13,7 @@ import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AuthContext } from "../../contexts/AuthContext";
 
-const BACKEND_BASE = "http://172.31.68.164:3000"; // update if your machine IP changed
+import { BACKEND_BASE } from '../../config/api';
 
 export default function StudentRegister({ navigation }) {
   const [name, setName] = useState("");

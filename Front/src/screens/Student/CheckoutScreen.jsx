@@ -14,7 +14,7 @@ import { WebView } from 'react-native-webview';
 import { CartContext } from '../../contexts/CartContext';
 import { AuthContext } from '../../contexts/AuthContext';
 
-const BACKEND_BASE = 'http://172.31.68.164:3000';
+import { BACKEND_BASE } from '../../config/api';
 const RAZORPAY_KEY = 'rzp_test_RiAF98in79f7cJ';
 
 export default function CheckoutScreen({ navigation }) {

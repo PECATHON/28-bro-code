@@ -16,7 +16,7 @@ import { AuthContext } from '../../contexts/AuthContext';
 // DISABLED: Notification system hidden to avoid "No project id" error
 // import { notifyNewOrder, requestNotificationPermissions } from '../../services/notifications';
 
-const BACKEND_BASE = 'http://172.31.68.164:3000';
+import { BACKEND_BASE } from '../../config/api';
 
 export default function VendorOrders({ navigation }) {
   const { user } = useContext(AuthContext);

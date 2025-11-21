@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-const BACKEND_BASE = "http://172.31.68.164:3000";
+import { BACKEND_BASE } from '../../config/api';
 import { vendorImages, FALLBACK_IMAGE, getVendorImage } from "../../data/vendorImages";
 
 function VendorCard({ vendor, onPress }) {

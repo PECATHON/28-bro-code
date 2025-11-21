@@ -15,7 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../contexts/AuthContext';
 
-const BACKEND_BASE = 'http://172.31.68.164:3000';
+import { BACKEND_BASE } from '../../config/api';
 
 export default function OrderDetail({ route, navigation }) {
   const { order: initialOrder, orderId } = route.params || {};

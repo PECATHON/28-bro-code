@@ -14,16 +14,7 @@ import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AuthContext } from "../../contexts/AuthContext";
 
-/**
- * IMPORTANT:
- * - For Expo Go on a real device, set BACKEND_BASE to your PC's LAN IP, e.g.:
- *     const BACKEND_BASE = "http://192.168.1.46:3000";
- * - For Android emulator (AVD) use: http://10.0.2.2:3000
- * - For iOS simulator use: http://localhost:3000
- *
- * Replace the value below with the correct one for your setup.
- */
-const BACKEND_BASE = "http://172.31.68.164:3000";
+import { BACKEND_BASE } from '../../config/api';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");

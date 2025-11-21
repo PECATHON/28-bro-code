@@ -19,7 +19,7 @@ import getMenu from "./routes/getMenu.js";
 const app = express();
 const port = process.env.PORT || 3000;
 
-// CORS SAFE FOR EXPO + WEB
+// CORS SAFE FOR EXPO + WEB + REAL DEVICES
 const defaultOrigins = ["http://localhost:5173", "http://localhost:19006"];
 const envOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map(s => s.trim())
@@ -29,9 +29,29 @@ const whitelist = [...new Set([...defaultOrigins, ...envOrigins])];
 
 const corsOptions = {
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // Expo native (no origin header)
-    if (whitelist.includes(origin)) return cb(null, true);
-    console.log("Blocked CORS:", origin);
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) {
+      return cb(null, true);
+    }
+    
+    // Allow whitelisted origins
+    if (whitelist.includes(origin)) {
+      return cb(null, true);
+    }
+    
+    // Allow local network IPs (for real devices on same WiFi)
+    // This regex matches common local network IP ranges:
+    // - 192.168.x.x
+    // - 10.0.x.x
+    // - 172.16-31.x.x
+    // - localhost variants
+    const localNetworkRegex = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+)(:\d+)?$/;
+    if (localNetworkRegex.test(origin)) {
+      console.log("✅ Allowed local network origin:", origin);
+      return cb(null, true);
+    }
+    
+    console.log("⚠️ Blocked CORS origin:", origin);
     cb(new Error("CORS blocked"));
   },
   credentials: true,

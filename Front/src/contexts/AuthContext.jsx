@@ -2,6 +2,7 @@
 import React, { createContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
+import { BACKEND_BASE } from "../config/api";
 
 export const AuthContext = createContext();
 
@@ -47,7 +48,7 @@ export function AuthProvider({ children }) {
     try {
       // attempt to call backend signout so server clears cookies (optional)
       try {
-        await fetch(`${process.env.BACKEND_BASE || "http://172.31.68.164:3000"}/api/auth/signout`, {
+        await fetch(`${BACKEND_BASE}/api/auth/signout`, {
           method: "POST",
           credentials: "include",
         });

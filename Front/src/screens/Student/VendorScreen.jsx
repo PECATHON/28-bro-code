@@ -17,7 +17,7 @@ import { CartContext } from '../../contexts/CartContext';
 import { vendorImages, FALLBACK_IMAGE } from '../../data/vendorImages';
 import { getFoodImage, FALLBACK_FOOD_IMAGE } from '../../data/foodImages';
 
-const BACKEND_BASE = 'http://172.31.68.164:3000';
+import { BACKEND_BASE } from '../../config/api';
 
 export default function VendorScreen({ route, navigation }) {
   const { vendor, vendorId } = route.params || {};

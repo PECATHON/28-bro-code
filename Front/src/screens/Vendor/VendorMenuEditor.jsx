@@ -33,7 +33,7 @@ import { useFocusEffect } from '@react-navigation/native';
  *   (the server import endpoint accepts `filepath` for dev use).
  */
 
-const BACKEND_BASE = 'http://172.31.68.164:3000'; // update to your backend if needed
+import { BACKEND_BASE } from '../../config/api';
 const DEV_IMPORT_PATH = '/mnt/data/Screenshot 2025-11-20 at 10.55.56 PM.png'; // developer-provided file path
 
 export default function VendorMenuEditor() {

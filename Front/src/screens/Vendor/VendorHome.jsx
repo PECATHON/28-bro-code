@@ -3,7 +3,7 @@ import React, { useEffect, useState, useContext } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
 import { AuthContext } from '../../contexts/AuthContext';
 
-const BACKEND_BASE = 'http://172.31.68.164:3000';
+import { BACKEND_BASE } from '../../config/api';
 
 export default function VendorHome({ navigation }) {
   const { user } = useContext(AuthContext);
