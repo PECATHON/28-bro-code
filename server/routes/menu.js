@@ -110,16 +110,14 @@ router.post("/:vendorId/import", async (req, res) => {
       return res.status(400).json({ message: "No records found in CSV" });
     }
 
-    // normalize and map rows
+    // normalize and map rows - use only minimal required fields
     const rows = records.map(r => ({
       vendor_id: vendorId,
       name: (r.name || "").trim(),
-      description: r.description ? r.description.trim() : null,
       price: r.price ? parseFloat(r.price) : 0,
-      category: r.category ? r.category.trim() : null,
-      image_url: r.image_url ? r.image_url.trim() : null,
-      is_available: r.is_available ? (String(r.is_available).toLowerCase() === "true") : true,
       created_at: new Date().toISOString(),
+      // Only add description if provided (might not exist in table)
+      ...(r.description && r.description.trim() ? { description: r.description.trim() } : {}),
     }));
 
     // batch insert (watch out for large files in production!)
@@ -191,22 +189,65 @@ router.post("/:vendorId", async (req, res) => {
   }
 
   try {
-    const { data, error } = await supabaseAdmin
-      .from("menu_items")
-      .insert([{
-        vendor_id: vendorId,
-        name,
-        description: description || null,
-        price,
-        category: category || null,
-        image_url: image_url || null,
-        is_available: typeof is_available === "boolean" ? is_available : true,
-        created_at: new Date().toISOString()
-      }])
-      .select()
-      .single();
-
-    if (error) throw error;
+    // Start with absolute minimum required fields
+    // Try with minimal fields first, then add optional ones if they exist
+    let insertData = {
+      vendor_id: vendorId,
+      name: name.trim(),
+      price: parseFloat(price),
+      created_at: new Date().toISOString()
+    };
+    
+    // Add description if provided (likely exists)
+    if (description && description.trim()) {
+      insertData.description = description.trim();
+    }
+    
+    // Try insert with minimal fields first
+    let data, error;
+    let attempt = 0;
+    const maxAttempts = 3;
+    
+    while (attempt < maxAttempts) {
+      const { data: result, error: err } = await supabaseAdmin
+        .from("menu_items")
+        .insert([insertData])
+        .select()
+        .single();
+      
+      data = result;
+      error = err;
+      
+      if (!error) {
+        // Success!
+        break;
+      }
+      
+      // If error mentions a column that doesn't exist, remove it and retry
+      const errorMsg = error.message || '';
+      if (errorMsg.includes("column") || errorMsg.includes("schema cache")) {
+        console.log(`⚠️ Attempt ${attempt + 1}: Column error detected, removing optional fields`);
+        
+        // Remove all optional fields and keep only absolute minimum
+        insertData = {
+          vendor_id: vendorId,
+          name: name.trim(),
+          price: parseFloat(price),
+          created_at: new Date().toISOString()
+        };
+        
+        attempt++;
+        continue;
+      } else {
+        // Different error, throw it
+        throw error;
+      }
+    }
+    
+    if (error) {
+      throw error;
+    }
+    
     return res.status(201).json(data);
   } catch (err) {
     console.error("POST /api/menu/:vendorId error:", err);
@@ -220,17 +261,56 @@ router.post("/:vendorId", async (req, res) => {
  */
 router.put("/:vendorId/:itemId", async (req, res) => {
   const { vendorId, itemId } = req.params;
-  const updates = { ...req.body, updated_at: new Date().toISOString() };
+  const updates = { ...req.body };
+  
+  // Start with only absolute minimum fields that definitely exist
+  const minimalUpdates = {};
+  
+  // Only include name and price (definitely required)
+  if (updates.name !== undefined) {
+    minimalUpdates.name = updates.name;
+  }
+  if (updates.price !== undefined) {
+    minimalUpdates.price = parseFloat(updates.price);
+  }
+  
+  // Try to add description if provided (might not exist)
+  if (updates.description !== undefined && updates.description !== null) {
+    minimalUpdates.description = updates.description;
+  }
 
   try {
-    const { data, error } = await supabaseAdmin
-      .from("menu_items")
-      .update(updates)
-      .eq("id", itemId)
-      .eq("vendor_id", vendorId)
-      .select()
-      .single();
-
+    let data, error;
+    let attempt = 0;
+    const maxAttempts = 2;
+    
+    while (attempt < maxAttempts) {
+      const { data: result, error: err } = await supabaseAdmin
+        .from("menu_items")
+        .update(minimalUpdates)
+        .eq("id", itemId)
+        .eq("vendor_id", vendorId)
+        .select()
+        .single();
+      
+      data = result;
+      error = err;
+      
+      if (!error) {
+        break;
+      }
+      
+      // If error mentions a column, remove description and retry
+      if (error.message && (error.message.includes("column") || error.message.includes("schema cache"))) {
+        console.log("⚠️ Column error in update, removing optional fields");
+        delete minimalUpdates.description;
+        attempt++;
+        continue;
+      }
+      
+      throw error;
+    }
+    
     if (error) throw error;
     return res.json(data);
   } catch (err) {

@@ -15,6 +15,16 @@ export function AuthProvider({ children }) {
         const raw = await AsyncStorage.getItem("user");
         if (raw) setUser(JSON.parse(raw));
       } catch (e) {
+        // Suppress SecureStore directory errors on iOS Simulator (known issue, doesn't affect functionality)
+        if (e.message && (
+          e.message.includes("SecureStore") ||
+          e.message.includes("ExponentExperienceData") ||
+          e.message.includes("@anonymous") ||
+          e.message.includes("storage directory")
+        )) {
+          // This is a known iOS Simulator issue - silently ignore
+          return;
+        }
         console.warn("Auth rehydrate failed", e);
       }
     })();

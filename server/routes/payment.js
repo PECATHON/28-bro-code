@@ -234,22 +234,33 @@ router.post("/verify", async (req, res) => {
       items_sample: items[0] || null,
     });
 
-    const { data: orderDataInserted, error: orderError } = await supabaseAdmin
-      .from("orders")
-      .insert([orderRecord])
-      .select()
-      .single();
-
-    if (orderError) {
-      console.error("❌ Order insert error:", orderError);
-      console.error("Error code:", orderError.code);
-      console.error("Error message:", orderError.message);
-      console.error("Error details:", orderError.details);
-      console.error("Error hint:", orderError.hint);
-      console.error("Order record attempted:", JSON.stringify(orderRecord, null, 2));
+    // Try to insert order - retry logic for better reliability
+    let orderDataInserted = null;
+    let orderError = null;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts && !orderDataInserted) {
+      attempts++;
+      console.log(`📝 Attempt ${attempts} to create order...`);
       
-      // Try to update existing order if it's a duplicate
-      if (orderError.code === "23505") {
+      const { data: inserted, error: err } = await supabaseAdmin
+        .from("orders")
+        .insert([orderRecord])
+        .select()
+        .single();
+      
+      if (!err && inserted) {
+        orderDataInserted = inserted;
+        console.log(`✅ Order created successfully on attempt ${attempts}:`, inserted.id);
+        break;
+      }
+      
+      orderError = err;
+      console.error(`❌ Order insert attempt ${attempts} failed:`, err);
+      
+      // If duplicate, try to update instead
+      if (err?.code === "23505") {
         console.log("🔄 Duplicate order detected, attempting to update existing order...");
         const { data: updatedOrder, error: updateError } = await supabaseAdmin
           .from("orders")
@@ -257,6 +268,8 @@ router.post("/verify", async (req, res) => {
             status: "confirmed",
             payment_id: paymentId,
             payment_method: payment.method || "razorpay",
+            items: items, // Update items too
+            total_amount: totalAmount, // Update total
             updated_at: new Date().toISOString(),
           })
           .eq("razorpay_order_id", orderId)
@@ -266,38 +279,89 @@ router.post("/verify", async (req, res) => {
         if (!updateError && updatedOrder) {
           console.log("✅ Updated existing order:", updatedOrder.id);
           orderDataInserted = updatedOrder;
+          break;
         } else {
-          // Even if update fails, payment was successful - return success
-          console.warn("⚠️ Could not update order, but payment was successful");
-          return res.json({
-            success: true,
-            message: "Payment verified. Order will be processed.",
-            warning: "Order record update had issues, but payment was successful",
-            order: null,
-            transaction: null,
-          });
+          console.error("❌ Update also failed:", updateError);
         }
-      } else {
-        // For other errors, still return success since payment was successful
-        // Log the error for admin to fix later
-        console.warn("⚠️ Order creation failed, but payment was successful. Order will need manual processing.");
-        return res.json({
-          success: true,
-          message: "Payment verified. Order will be processed.",
-          warning: "Order record creation had issues, but payment was successful",
-          error_details: {
-            code: orderError.code,
-            message: orderError.message,
-          },
-          order: null,
-          transaction: null,
-        });
+      }
+      
+      // Wait a bit before retrying (except on last attempt)
+      if (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
-    if (orderDataInserted) {
-      console.log("✅ Order created/updated successfully:", orderDataInserted.id);
+    // If order creation failed after all attempts, this is critical
+    if (!orderDataInserted) {
+      console.error("❌ CRITICAL: Failed to create order after", maxAttempts, "attempts");
+      console.error("❌ Order error details:", {
+        code: orderError?.code,
+        message: orderError?.message,
+        details: orderError?.details,
+        hint: orderError?.hint,
+      });
+      console.error("❌ Order record that failed:", JSON.stringify(orderRecord, null, 2));
+      
+      // Return error - order MUST be created
+      return res.status(500).json({
+        success: false,
+        message: "Payment verified but failed to create order record",
+        error: "Order creation failed after multiple attempts",
+        error_details: {
+          code: orderError?.code,
+          message: orderError?.message,
+          details: orderError?.details,
+        },
+        order: null,
+        transaction: null,
+      });
     }
+
+    // Order was successfully created - verify it exists
+    console.log("✅ Order created/updated successfully:", orderDataInserted.id);
+    console.log("✅ Order details:", {
+      id: orderDataInserted.id,
+      user_id: orderDataInserted.user_id,
+      vendor_id: orderDataInserted.vendor_id,
+      status: orderDataInserted.status,
+      total_amount: orderDataInserted.total_amount,
+      items_count: Array.isArray(orderDataInserted.items) ? orderDataInserted.items.length : 0,
+    });
+    
+    // Verify the order was actually saved by querying it back
+    const { data: verifyOrder, error: verifyError } = await supabaseAdmin
+      .from("orders")
+      .select("*")
+      .eq("id", orderDataInserted.id)
+      .single();
+    
+    if (verifyError || !verifyOrder) {
+      console.error("❌ CRITICAL: Order was created but cannot be verified:", verifyError);
+      return res.status(500).json({
+        success: false,
+        message: "Order was created but cannot be verified in database",
+        error: verifyError?.message || "Order verification failed",
+        order: orderDataInserted, // Return what we have
+      });
+    } else {
+      console.log("✅ Order verified in database:", verifyOrder.id);
+    }
+    
+    // Fetch customer info for notification
+    const { data: customerProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", userId)
+      .single();
+    
+    const customerName = customerProfile?.full_name || customerProfile?.email || "Customer";
+    
+    console.log("📱 New order created - notification data:", {
+      orderId: orderDataInserted.id,
+      customerName: customerName,
+      total: totalAmount,
+      vendorId: vendorId,
+    });
 
     // 2. Create transaction record for admin (optional - don't fail if this fails)
     let transactionData = null;
@@ -351,11 +415,39 @@ router.post("/verify", async (req, res) => {
     }
 
     // Always return success - payment was successful with Razorpay
+    // Fetch vendor info for the response
+    const { data: vendorInfo } = await supabaseAdmin
+      .from("vendors")
+      .select("shop_name, owner_name")
+      .eq("id", vendorId)
+      .single();
+    
+    const vendorName = vendorInfo?.shop_name || vendorInfo?.owner_name || "Vendor";
+    
+    // Reuse customerProfile from earlier (already fetched at line 351)
+    // customerProfile and customerName are already available from earlier in the function
+    
     const response = {
       success: true,
       message: "Payment verified and order confirmed",
-      order: orderDataInserted || null,
+      order: orderDataInserted ? {
+        ...orderDataInserted,
+        vendor: {
+          id: vendorId,
+          name: vendorName,
+        },
+        placedAt: orderDataInserted.created_at,
+        total: parseFloat(orderDataInserted.total_amount) || 0,
+        items: Array.isArray(orderDataInserted.items) ? orderDataInserted.items : [],
+      } : null,
       transaction: transactionData || null,
+      notification: {
+        vendorId: vendorId,
+        vendorName: vendorName,
+        customerName: customerName,
+        orderId: orderDataInserted?.id || null,
+        total: totalAmount,
+      },
     };
     
     console.log("✅ Payment verification complete:", {
@@ -363,6 +455,8 @@ router.post("/verify", async (req, res) => {
       orderId: orderDataInserted?.id || null,
       userId: userId,
       vendorId: vendorId,
+      vendorName: vendorName,
+      customerName: customerName,
     });
     
     return res.json(response);

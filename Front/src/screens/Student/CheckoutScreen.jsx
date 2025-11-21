@@ -45,7 +45,7 @@ export default function CheckoutScreen({ navigation }) {
             onPress={() => navigation.navigate('StudentTabs', { screen: 'Home' })}
           >
             <Text style={styles.btnText}>Continue Shopping</Text>
-          </TouchableOpacity>
+            </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -98,10 +98,15 @@ export default function CheckoutScreen({ navigation }) {
       }
 
       const orderData = await orderRes.json();
-      console.log('Order created successfully:', orderData);
+      console.log('✅ Order created successfully:', orderData);
+
+      if (!orderData.id) {
+        throw new Error('Invalid order response from server');
+      }
 
       setRazorpayOrderId(orderData.id);
       setShowPayment(true);
+      setLoading(false); // Stop loading when payment modal opens
     } catch (error) {
       console.error('Payment error:', error);
       
@@ -128,11 +133,16 @@ export default function CheckoutScreen({ navigation }) {
     return `<!DOCTYPE html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta charset="UTF-8">
   <title>Razorpay Checkout</title>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
     body {
       margin: 0;
       padding: 20px;
@@ -145,6 +155,15 @@ export default function CheckoutScreen({ navigation }) {
     }
     .container {
       text-align: center;
+      width: 100%;
+    }
+    h2 {
+      color: ${palette.orange};
+      margin-bottom: 10px;
+    }
+    p {
+      color: #6b7280;
+      margin-bottom: 30px;
     }
     button {
       background: #0f1724;
@@ -154,10 +173,15 @@ export default function CheckoutScreen({ navigation }) {
       font-size: 18px;
       border-radius: 8px;
       cursor: pointer;
-      margin-top: 20px;
+      width: 100%;
+      max-width: 300px;
     }
-    button:hover {
-      opacity: 0.9;
+    button:active {
+      opacity: 0.8;
+    }
+    .loading {
+      color: #6b7280;
+      margin-top: 20px;
     }
   </style>
 </head>
@@ -165,50 +189,180 @@ export default function CheckoutScreen({ navigation }) {
   <div class="container">
     <h2>Complete Payment</h2>
     <p>Click the button below to proceed with payment</p>
-    <button id="pay-button">Pay Now</button>
+    <button id="pay-button">Pay ₹${total.toFixed(2)}</button>
+    <p id="status" class="loading"></p>
   </div>
   <script>
-    var options = {
-      "key": "${RAZORPAY_KEY}",
-      "amount": ${Math.round(total * 100)},
-      "currency": "INR",
-      "name": "Campus Canteen",
-      "description": "Food Order Payment",
-      "order_id": "${orderId}",
-      "handler": function (response) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'payment_success',
-          data: response
-        }));
-      },
-      "prefill": {
-        "name": "${safeName}",
-        "email": "${safeEmail}",
-        "contact": "${safePhone}"
-      },
-      "theme": {
-        "color": "#0f1724"
-      },
-      "modal": {
-        "ondismiss": function() {
+    (function() {
+      var statusEl = document.getElementById('status');
+      var payButton = document.getElementById('pay-button');
+      var rzp = null;
+      var scriptLoaded = false;
+      
+      function updateStatus(msg) {
+        if (statusEl) {
+          statusEl.textContent = msg;
+        }
+        console.log('Payment Status:', msg);
+      }
+      
+      function waitForRazorpay(maxAttempts) {
+        maxAttempts = maxAttempts || 30; // 30 attempts = 15 seconds
+        var attempts = 0;
+        
+        return new Promise(function(resolve, reject) {
+          function check() {
+            attempts++;
+            if (typeof Razorpay !== 'undefined') {
+              scriptLoaded = true;
+              console.log('✅ Razorpay script loaded');
+              resolve();
+            } else if (attempts >= maxAttempts) {
+              reject(new Error('Razorpay script failed to load after ' + maxAttempts + ' attempts'));
+            } else {
+              setTimeout(check, 500);
+            }
+          }
+          check();
+        });
+      }
+      
+      function initRazorpay() {
+        try {
+          if (typeof Razorpay === 'undefined') {
+            updateStatus('Waiting for Razorpay to load...');
+            // Retry after a short delay
+            setTimeout(function() {
+              if (typeof Razorpay !== 'undefined') {
+                initRazorpay();
+              } else {
+                updateStatus('Error: Razorpay not available. Please refresh.');
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'payment_error',
+                  error: 'Razorpay library not loaded'
+                }));
+              }
+            }, 1000);
+            return;
+          }
+          
+          var options = {
+            "key": "${RAZORPAY_KEY}",
+            "amount": ${Math.round(total * 100)},
+            "currency": "INR",
+            "name": "Campus Canteen",
+            "description": "Food Order Payment",
+            "order_id": "${orderId}",
+            "handler": function (response) {
+              updateStatus('Payment successful! Processing...');
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'payment_success',
+                data: response
+              }));
+            },
+            "prefill": {
+              "name": "${safeName}",
+              "email": "${safeEmail}",
+              "contact": "${safePhone}"
+            },
+            "theme": {
+              "color": "${palette.orange}"
+            },
+            "modal": {
+              "ondismiss": function() {
+                updateStatus('Payment cancelled');
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'payment_cancelled'
+                }));
+              }
+            },
+            "notes": {
+              "order_type": "food_order"
+            }
+          };
+          
+          rzp = new Razorpay(options);
+          updateStatus('Ready to pay');
+          
+          // Set up button click handler
+          if (payButton) {
+            payButton.onclick = function(e) {
+              e.preventDefault();
+              updateStatus('Opening payment gateway...');
+              try {
+                if (rzp) {
+                  rzp.open();
+                } else {
+                  updateStatus('Error: Payment gateway not initialized');
+                }
+              } catch (err) {
+                updateStatus('Error: ' + err.message);
+                console.error('Razorpay open error:', err);
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'payment_error',
+                  error: 'Failed to open payment gateway: ' + err.message
+                }));
+              }
+            };
+          }
+          
+          // Auto-open after a short delay
+          setTimeout(function() {
+            if (rzp) {
+              updateStatus('Opening payment gateway...');
+              try {
+                rzp.open();
+              } catch (err) {
+                updateStatus('Click button to pay');
+                console.error('Auto-open failed:', err);
+              }
+            }
+          }, 1500);
+          
+        } catch (err) {
+          updateStatus('Error: ' + err.message);
+          console.error('Razorpay init error:', err);
           window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'payment_cancelled'
+            type: 'payment_error',
+            error: 'Failed to initialize payment: ' + err.message
           }));
         }
       }
-    };
-    
-    var rzp = new Razorpay(options);
-    
-    document.getElementById('pay-button').onclick = function(e) {
-      rzp.open();
-      e.preventDefault();
-    };
-    
-    // Auto-open on load
-    window.onload = function() {
-      rzp.open();
-    };
+      
+      // Start loading process
+      updateStatus('Loading payment gateway...');
+      
+      // Wait for Razorpay script to load (it's in the head tag)
+      waitForRazorpay(30)
+        .then(function() {
+          updateStatus('Initializing payment...');
+          initRazorpay();
+        })
+        .catch(function(err) {
+          updateStatus('Failed to load. Click button to retry.');
+          console.error('Script load error:', err);
+          
+          // Set up retry button
+          if (payButton) {
+            payButton.textContent = 'Retry Loading Payment';
+            payButton.onclick = function(e) {
+              e.preventDefault();
+              updateStatus('Retrying...');
+              waitForRazorpay(30)
+                .then(function() {
+                  initRazorpay();
+                })
+                .catch(function(retryErr) {
+                  updateStatus('Failed: ' + retryErr.message);
+                  window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'payment_error',
+                    error: 'Failed to load Razorpay: ' + retryErr.message
+                  }));
+                });
+            };
+          }
+        });
+    })();
   </script>
 </body>
 </html>`;
@@ -232,6 +386,10 @@ export default function CheckoutScreen({ navigation }) {
         setShowPayment(false);
         setLoading(false);
         Alert.alert('Cancelled', 'Payment was cancelled');
+      } else if (message.type === 'payment_error') {
+        setShowPayment(false);
+        setLoading(false);
+        Alert.alert('Payment Error', message.error || 'Payment failed. Please try again.');
       }
     } catch (err) {
       console.error('Error parsing WebView message:', err);
@@ -260,18 +418,33 @@ export default function CheckoutScreen({ navigation }) {
       });
 
       const verifyData = await verifyRes.json();
+      console.log('📦 Payment verification response:', verifyData);
 
-      // If payment was successful with Razorpay, always show success to user
-      // Backend errors are logged but don't block the user experience
-      if (verifyRes.ok && verifyData.success) {
-        // Perfect case - everything worked
-        console.log('✅ Payment verified and order created successfully');
-      } else {
-        // Payment succeeded with Razorpay but backend had issues
-        // Log the error but still show success to user
-        console.warn('⚠️ Payment successful but backend verification had issues:', verifyData);
-        // The order will be created/updated later via webhook or manual process
+      // Check if order was actually created
+      if (!verifyRes.ok || !verifyData.success) {
+        console.error('❌ Payment verification failed:', verifyData);
+        Alert.alert(
+          'Payment Issue',
+          verifyData.message || 'Payment was successful but order creation failed. Please contact support.',
+          [{ text: 'OK' }]
+        );
+        setLoading(false);
+        return;
       }
+      
+      if (!verifyData.order || !verifyData.order.id) {
+        console.error('❌ Order was not created:', verifyData);
+        Alert.alert(
+          'Order Creation Failed',
+          'Payment was successful but order was not created. Please contact support with payment ID: ' + paymentId,
+          [{ text: 'OK' }]
+        );
+        setLoading(false);
+        return;
+      }
+
+      // Perfect case - everything worked
+      console.log('✅ Payment verified and order created successfully:', verifyData.order.id);
 
       // Always show success if we got here (payment was successful with Razorpay)
       clearCart();
@@ -279,33 +452,25 @@ export default function CheckoutScreen({ navigation }) {
       // Get the created order data if available
       const createdOrder = verifyData?.order || null;
       
+      console.log('✅ Payment verified - Order created:', createdOrder?.id);
+      
+      // Navigate to orders screen to show the new order
+      // The orders screen will automatically refresh and show the new order
       Alert.alert(
-        'Order Confirmed!',
-        'Your order has been placed successfully. You will receive a confirmation shortly.',
+        'Order Confirmed! ✅',
+        `Your order has been placed successfully!\n\nOrder ID: ${createdOrder?.id?.substring(0, 8) || 'N/A'}...\nAmount: ₹${total.toFixed(2)}\n\nThe vendor has been notified.`,
         [
           {
-            text: 'View Order',
+            text: 'View Orders',
             onPress: () => {
-              if (createdOrder) {
-                // Navigate directly to order detail if we have the order data
-                navigation.navigate('OrderDetail', { order: createdOrder });
-              } else {
-                // Otherwise go to orders list
-                navigation.navigate('StudentTabs', { screen: 'Orders' });
-              }
+              // Navigate to orders screen - it will auto-refresh
+              navigation.navigate('StudentTabs', { screen: 'Orders' });
             },
           },
           {
             text: 'Back to Home',
             onPress: () => {
               navigation.navigate('StudentTabs', { screen: 'Home' });
-            },
-          },
-          {
-            text: 'View Orders',
-            style: 'cancel',
-            onPress: () => {
-              navigation.navigate('StudentTabs', { screen: 'Orders' });
             },
           },
         ]
@@ -427,6 +592,33 @@ export default function CheckoutScreen({ navigation }) {
               domStorageEnabled={true}
               originWhitelist={['*']}
               mixedContentMode="always"
+              allowsInlineMediaPlayback={true}
+              mediaPlaybackRequiresUserAction={false}
+              startInLoadingState={true}
+              scalesPageToFit={true}
+              cacheEnabled={false}
+              incognito={true}
+              onError={(syntheticEvent) => {
+                const { nativeEvent } = syntheticEvent;
+                console.error('WebView error:', nativeEvent);
+                Alert.alert('Payment Error', 'Failed to load payment page. Please try again.');
+                setShowPayment(false);
+                setLoading(false);
+              }}
+              onHttpError={(syntheticEvent) => {
+                const { nativeEvent } = syntheticEvent;
+                console.error('WebView HTTP error:', nativeEvent);
+              }}
+              onLoadEnd={() => {
+                console.log('✅ Payment WebView loaded successfully');
+              }}
+              onLoadStart={() => {
+                console.log('🔄 Payment WebView started loading');
+              }}
+              onShouldStartLoadWithRequest={(request) => {
+                console.log('WebView navigation request:', request.url);
+                return true;
+              }}
             />
           )}
         </SafeAreaView>
@@ -435,10 +627,25 @@ export default function CheckoutScreen({ navigation }) {
   );
 }
 
+const palette = {
+  darkBlue: '#0f1724',
+  darkBlueLight: '#1a2332',
+  orange: '#ff6b35',
+  red: '#ef4444',
+  white: '#ffffff',
+  muted: '#9aa1a9',
+  mutedLight: '#cbd5e1',
+  card: '#1e293b',
+  cardLight: '#2d3748',
+  yellow: '#fbbf24',
+  neonYellow: '#fffb00',
+  neonYellowGlow: 'rgba(255, 251, 0, 0.5)',
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f7f3ec',
+    backgroundColor: palette.darkBlue,
   },
   scrollView: {
     flex: 1,
@@ -454,118 +661,136 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 18,
-    color: '#6b7280',
+    color: palette.mutedLight,
     marginBottom: 20,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
-    color: '#0f1724',
+    color: palette.white,
     marginBottom: 20,
+    letterSpacing: 0.5,
   },
   section: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    backgroundColor: palette.card,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: palette.neonYellow,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#0f1724',
-    marginBottom: 12,
+    color: palette.white,
+    marginBottom: 16,
+    letterSpacing: 0.5,
   },
   itemRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: palette.cardLight,
   },
   itemInfo: {
     flex: 1,
   },
   itemName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    color: '#0f1724',
+    color: palette.white,
   },
   itemQty: {
     fontSize: 14,
-    color: '#6b7280',
+    color: palette.mutedLight,
     marginTop: 4,
   },
   itemPrice: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#0f1724',
+    color: palette.orange,
   },
   priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
   priceLabel: {
     fontSize: 16,
-    color: '#6b7280',
+    color: palette.mutedLight,
   },
   priceValue: {
     fontSize: 16,
-    color: '#0f1724',
+    color: palette.white,
     fontWeight: '600',
   },
   totalRow: {
     borderTopWidth: 2,
-    borderTopColor: '#e5e7eb',
-    marginTop: 8,
-    paddingTop: 12,
+    borderTopColor: palette.neonYellow,
+    marginTop: 12,
+    paddingTop: 16,
   },
   totalLabel: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0f1724',
-  },
-  totalValue: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#0f1724',
+    color: palette.white,
+  },
+  totalValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: palette.orange,
   },
   btn: {
-    backgroundColor: '#0f1724',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: palette.orange,
+    padding: 18,
+    borderRadius: 25,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: palette.neonYellow,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   btnDisabled: {
     opacity: 0.6,
   },
   btnText: {
-    color: '#fff',
+    color: palette.white,
     fontSize: 18,
     fontWeight: '700',
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: palette.darkBlue,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: palette.neonYellow,
+    backgroundColor: palette.card,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
-    color: '#0f1724',
+    color: palette.white,
+    letterSpacing: 0.5,
   },
   closeButton: {
-    fontSize: 24,
-    color: '#6b7280',
+    fontSize: 28,
+    color: palette.mutedLight,
     fontWeight: '300',
   },
   webview: {

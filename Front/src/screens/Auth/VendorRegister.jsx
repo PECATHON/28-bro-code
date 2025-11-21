@@ -131,8 +131,6 @@ export default function VendorRegister({ navigation }) {
       // AppNavigator detects user.role === 'vendor' and routes to VendorApp (VendorTabs)
       // VendorTabs has initialRouteName="VendorHome", so user lands on VendorHome
     } catch (err) {
-      console.error("❌ vendor signup/login error:", err);
-      
       // Check if it's a storage error (non-critical - registration likely succeeded)
       const isStorageError = err.message && (
         err.message.includes("storage directory") ||
@@ -144,18 +142,22 @@ export default function VendorRegister({ navigation }) {
       );
       
       if (isStorageError) {
-        console.warn("⚠️ Storage error detected - this is non-critical");
-        console.warn("⚠️ Registration likely succeeded - user data is in AuthContext");
+        // Storage error is non-critical - registration succeeded, just token storage failed
+        // Log as warning instead of error to reduce console noise
+        console.warn("⚠️ Storage error (non-critical):", err.message);
+        console.warn("✅ Registration succeeded - user data is in AuthContext");
+        console.warn("✅ User can continue - navigation will work");
         // Don't show error - registration succeeded, just storage failed
         // User can continue - navigation will work because user is in AuthContext
         // Show success message instead
         Alert.alert(
-          "Registration Successful!",
+          "Registration Successful! ✅",
           "Your vendor account has been created. You can now use the app.",
           [{ text: "OK" }]
         );
       } else {
-        // Real error - show to user
+        // Real error - log and show to user
+        console.error("❌ Vendor registration error:", err);
         Alert.alert("Registration Error", err.message || "Check Wi-Fi & backend connection");
       }
     } finally {
@@ -167,10 +169,36 @@ export default function VendorRegister({ navigation }) {
     <View style={styles.card}>
       <Text style={styles.title}>Vendor Registration</Text>
 
-      <TextInput placeholder="Owner Name" value={name} onChangeText={setName} style={styles.input} />
-      <TextInput placeholder="Shop Name" value={shop} onChangeText={setShop} style={styles.input} />
-      <TextInput placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" style={styles.input} />
-      <TextInput placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} style={styles.input} />
+      <TextInput 
+        placeholder="Owner Name" 
+        placeholderTextColor={palette.mutedLight}
+        value={name} 
+        onChangeText={setName} 
+        style={styles.input} 
+      />
+      <TextInput 
+        placeholder="Shop Name" 
+        placeholderTextColor={palette.mutedLight}
+        value={shop} 
+        onChangeText={setShop} 
+        style={styles.input} 
+      />
+      <TextInput 
+        placeholder="Email" 
+        placeholderTextColor={palette.mutedLight}
+        value={email} 
+        onChangeText={setEmail} 
+        autoCapitalize="none" 
+        style={styles.input} 
+      />
+      <TextInput 
+        placeholder="Password" 
+        placeholderTextColor={palette.mutedLight}
+        secureTextEntry 
+        value={password} 
+        onChangeText={setPassword} 
+        style={styles.input} 
+      />
 
       <TouchableOpacity style={styles.btn} onPress={onRegister} disabled={loading}>
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Register</Text>}
@@ -180,43 +208,74 @@ export default function VendorRegister({ navigation }) {
 }
 
 const palette = {
-  cream: "#f7f3ec",
-  navy: "#0f1724",
-  gold: "#c59d5f",
+  darkBlue: '#0f1724',
+  darkBlueLight: '#1a2332',
+  orange: '#ff6b35',
+  red: '#ef4444',
+  white: '#ffffff',
+  muted: '#9aa1a9',
+  mutedLight: '#cbd5e1',
+  card: '#1e293b',
+  cardLight: '#2d3748',
+  yellow: '#fbbf24',
+  neonYellow: '#fffb00',
+  neonYellowGlow: 'rgba(255, 251, 0, 0.5)',
 };
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: palette.card,
     margin: 20,
-    marginTop: 80,
-    padding: 20,
-    borderRadius: 16,
-    elevation: 5,
+    marginTop: 20,
+    padding: 24,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: palette.neonYellow,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 12,
   },
   title: {
     textAlign: "center",
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: "800",
-    color: palette.navy,
-    marginBottom: 12,
+    color: palette.white,
+    marginBottom: 20,
+    letterSpacing: 0.5,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-    backgroundColor: palette.cream,
+    borderColor: palette.neonYellow,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+    backgroundColor: palette.darkBlue,
+    color: palette.white,
+    fontSize: 16,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 6,
   },
   btn: {
-    backgroundColor: palette.gold,
-    padding: 12,
-    borderRadius: 12,
+    backgroundColor: palette.orange,
+    padding: 18,
+    borderRadius: 25,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: palette.neonYellow,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   btnText: {
-    color: palette.navy,
+    color: palette.white,
     fontWeight: "700",
+    fontSize: 18,
   },
 });

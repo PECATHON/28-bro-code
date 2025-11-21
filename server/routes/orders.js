@@ -6,6 +6,113 @@ import supabaseAdmin from "../db_admin.js";
 const router = Router();
 
 /**
+ * GET /api/orders/test
+ * Test endpoint to check if orders table exists and has data
+ */
+router.get("/test", async (req, res) => {
+  try {
+    // Check if orders table exists and get count
+    const { data: allOrders, error: allError, count: totalCount } = await supabaseAdmin
+      .from("orders")
+      .select("id, user_id, vendor_id, status, total_amount, created_at, razorpay_order_id", { count: 'exact' })
+      .order("created_at", { ascending: false })
+      .limit(10);
+    
+    // Get orders by user_id if provided
+    const { userId } = req.query;
+    let userOrders = null;
+    if (userId) {
+      const { data: userOrdersData, error: userError } = await supabaseAdmin
+        .from("orders")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+      
+      userOrders = userOrdersData || [];
+      console.log(`📦 Found ${userOrders.length} orders for user ${userId}`);
+    }
+    
+    return res.json({
+      success: true,
+      message: "Orders table accessible",
+      totalOrders: totalCount || 0,
+      sampleOrders: allOrders || [],
+      userOrders: userOrders,
+      userOrdersCount: userOrders ? userOrders.length : null,
+      error: allError?.message || null,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Test failed",
+      error: err.message,
+    });
+  }
+});
+
+/**
+ * POST /api/orders/test-create
+ * Test endpoint to create a sample order (for debugging)
+ */
+router.post("/test-create", async (req, res) => {
+  try {
+    const { userId, vendorId, items, total } = req.body;
+    
+    if (!userId || !vendorId || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        message: "Missing required fields",
+        required: ["userId", "vendorId", "items"],
+      });
+    }
+    
+    const orderRecord = {
+      razorpay_order_id: `test_${Date.now()}`,
+      user_id: userId,
+      vendor_id: vendorId,
+      items: items,
+      total_amount: total || items.reduce((sum, item) => sum + (item.price || 0) * (item.qty || 0), 0),
+      status: "confirmed",
+      payment_id: `test_pay_${Date.now()}`,
+      payment_method: "test",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    
+    console.log("🧪 Creating test order:", orderRecord);
+    
+    const { data: createdOrder, error: createError } = await supabaseAdmin
+      .from("orders")
+      .insert([orderRecord])
+      .select()
+      .single();
+    
+    if (createError) {
+      console.error("❌ Test order creation failed:", createError);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to create test order",
+        error: createError.message,
+        error_details: createError,
+      });
+    }
+    
+    console.log("✅ Test order created:", createdOrder.id);
+    
+    return res.json({
+      success: true,
+      message: "Test order created successfully",
+      order: createdOrder,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Test order creation failed",
+      error: err.message,
+    });
+  }
+});
+
+/**
  * GET /api/orders
  * Get orders for the current user
  * Query params: ?userId=uuid (required)
@@ -71,7 +178,7 @@ router.get("/", async (req, res) => {
       return {
         id: order.id,
         razorpay_order_id: order.razorpay_order_id,
-        status: order.status === "confirmed" ? "Preparing" : order.status === "completed" ? "Ready" : order.status,
+        status: order.status, // Keep backend status (confirmed, preparing, ready, completed, cancelled)
         total: parseFloat(order.total_amount) || 0,
         placedAt: order.created_at,
         vendor: {
@@ -265,14 +372,14 @@ router.get("/vendor/:vendorId", async (req, res) => {
 /**
  * PUT /api/orders/:orderId/status
  * Update order status (for vendors)
- * body: { status: "confirmed" | "completed" | "cancelled" }
+ * body: { status: "confirmed" | "completed" | "cancelled", vendorId, notifyStudent }
  */
 router.put("/:orderId/status", async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { status, vendorId } = req.body;
+    const { status, vendorId, notifyStudent } = req.body;
 
-    console.log("📦 PUT /api/orders/:orderId/status - orderId:", orderId, "status:", status);
+    console.log("📦 PUT /api/orders/:orderId/status - orderId:", orderId, "status:", status, "notifyStudent:", notifyStudent);
 
     if (!status) {
       return res.status(400).json({ message: "status is required" });
@@ -314,11 +421,53 @@ router.put("/:orderId/status", async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
+    // Prepare notification data for student on any status change
+    let notificationData = null;
+    if (notifyStudent) {
+      // Fetch vendor info
+      const { data: vendor } = await supabaseAdmin
+        .from("vendors")
+        .select("shop_name, owner_name")
+        .eq("id", updatedOrder.vendor_id)
+        .single();
+      
+      const vendorName = vendor?.shop_name || vendor?.owner_name || "Vendor";
+      
+      // Create appropriate message based on status
+      let message = "";
+      switch (status) {
+        case "preparing":
+          message = `Your order from ${vendorName} is now under process.`;
+          break;
+        case "ready":
+          message = `Your order from ${vendorName} is prepared and ready!`;
+          break;
+        case "completed":
+          message = `Your order from ${vendorName} is ready for pickup! 🎉`;
+          break;
+        case "cancelled":
+          message = `Your order from ${vendorName} has been rejected.`;
+          break;
+        default:
+          message = `Your order from ${vendorName} status has been updated to ${status}.`;
+      }
+      
+      notificationData = {
+        orderId: updatedOrder.id,
+        vendorName: vendorName,
+        status: status,
+        message: message,
+      };
+      
+      console.log("📱 Notification data prepared for student:", notificationData);
+    }
+
     console.log("✅ Order status updated:", updatedOrder.id, "to", status);
     return res.json({
       success: true,
       message: "Order status updated",
       order: updatedOrder,
+      notification: notificationData, // Frontend will handle the actual notification
     });
   } catch (err) {
     console.error("❌ PUT /api/orders/:orderId/status error:", err);

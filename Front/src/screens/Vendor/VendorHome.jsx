@@ -72,7 +72,7 @@ export default function VendorHome({ navigation }) {
 
       {loading ? (
         <View style={{ padding: 40, alignItems: 'center' }}>
-          <ActivityIndicator size="large" color="#0f1724" />
+          <ActivityIndicator size="large" color={palette.orange} />
         </View>
       ) : (
         <View style={styles.cardRow}>
@@ -104,30 +104,58 @@ export default function VendorHome({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f7f3ec' },
-  header: { padding: 18 },
-  title: { fontSize: 24, fontWeight: '700', color: '#0f1724' },
-  sub: { color: '#6b7280', marginTop: 6 },
+const palette = {
+  darkBlue: '#0f1724',
+  darkBlueLight: '#1a2332',
+  orange: '#ff6b35',
+  red: '#ef4444',
+  white: '#ffffff',
+  muted: '#9aa1a9',
+  mutedLight: '#cbd5e1',
+  card: '#1e293b',
+  cardLight: '#2d3748',
+  yellow: '#fbbf24',
+  neonYellow: '#fffb00',
+  neonYellowGlow: 'rgba(255, 251, 0, 0.5)',
+};
 
-  cardRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 16 },
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: palette.darkBlue },
+  header: { padding: 20, paddingTop: 20 },
+  title: { fontSize: 28, fontWeight: '700', color: palette.white, letterSpacing: 0.5 },
+  sub: { color: palette.mutedLight, marginTop: 8, fontSize: 15 },
+
+  cardRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 20 },
   statCard: {
     flex: 1,
     marginHorizontal: 6,
-    padding: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    padding: 20,
+    backgroundColor: palette.card,
+    borderRadius: 20,
     alignItems: 'center',
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: palette.neonYellow,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  statNum: { fontSize: 20, fontWeight: '800', color: '#0f1724' },
-  statLabel: { color: '#6b7280', marginTop: 6 },
+  statNum: { fontSize: 24, fontWeight: '800', color: palette.orange },
+  statLabel: { color: palette.mutedLight, marginTop: 8, fontSize: 13 },
 
   actionBtn: {
-    backgroundColor: '#0f1724',
-    paddingVertical: 12,
-    borderRadius: 10,
+    backgroundColor: palette.orange,
+    paddingVertical: 16,
+    borderRadius: 25,
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: palette.neonYellow,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  actionText: { color: '#f7f3ec', fontWeight: '700' },
+  actionText: { color: palette.white, fontWeight: '700', fontSize: 16 },
 });

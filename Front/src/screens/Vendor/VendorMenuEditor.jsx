@@ -10,8 +10,13 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
+  Image,
+  ScrollView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../contexts/AuthContext';
+import { getFoodImage, FALLBACK_FOOD_IMAGE } from '../../data/foodImages';
+import { useFocusEffect } from '@react-navigation/native';
 
 /**
  * VendorMenuEditor
@@ -39,12 +44,24 @@ export default function VendorMenuEditor() {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
+  const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState(null); // id of item being processed
+  const [editingItem, setEditingItem] = useState(null); // item being edited
 
   useEffect(() => {
     if (vendorId) fetchMenu();
   }, [vendorId]);
+
+  // Refresh menu when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (vendorId) {
+        console.log('🔄 VendorMenuEditor focused - refreshing menu');
+        fetchMenu();
+      }
+    }, [vendorId])
+  );
 
   async function fetchMenu() {
     setLoading(true);
@@ -57,7 +74,12 @@ export default function VendorMenuEditor() {
         throw new Error(txt || 'Failed to fetch menu');
       }
       const data = await res.json();
-      setMenu(Array.isArray(data) ? data : []);
+      // Transform menu items to include images
+      const transformedMenu = (Array.isArray(data) ? data : []).map(item => ({
+        ...item,
+        image: item.image_url || getFoodImage(item.name, item.category),
+      }));
+      setMenu(transformedMenu);
     } catch (err) {
       console.warn('fetchMenu error', err);
       Alert.alert('Error', 'Could not load menu. Check backend & network.');
@@ -112,17 +134,22 @@ export default function VendorMenuEditor() {
 
       if (!res.ok) {
         const errBody = await res.json().catch(() => null);
-        throw new Error(errBody?.message || 'Failed to create item');
+        const errorMessage = errBody?.message || errBody?.error || 'Failed to create item';
+        console.error('❌ Menu item creation failed:', errorMessage, errBody);
+        throw new Error(errorMessage);
       }
 
       const created = await res.json();
+      console.log('✅ Menu item created successfully:', created);
       // replace temp item with created item (server id)
       setMenu(prev => prev.map(i => (i.id === tempId ? created : i)));
+      Alert.alert('Success', 'Menu item added successfully!');
     } catch (err) {
-      console.warn('addItem error', err);
+      console.error('❌ addItem error:', err);
       // rollback optimistic update
       setMenu(prev => prev.filter(i => i.id !== tempId));
-      Alert.alert('Error', 'Could not add item. Try again.');
+      const errorMsg = err.message || 'Could not add item. Please check your connection and try again.';
+      Alert.alert('Error', errorMsg);
     } finally {
       setBusyId(null);
     }
@@ -267,7 +294,7 @@ export default function VendorMenuEditor() {
           renderItem={renderItem}
           ListEmptyComponent={() => (
             <View style={{ padding: 24, alignItems: 'center' }}>
-              <Text style={{ color: '#6b7280' }}>No items yet — add your first dish.</Text>
+              <Text style={{ color: palette.mutedLight, fontSize: 15 }}>No items yet — add your first dish.</Text>
             </View>
           )}
         />
@@ -276,75 +303,124 @@ export default function VendorMenuEditor() {
   );
 }
 
+const palette = {
+  darkBlue: '#0f1724',
+  darkBlueLight: '#1a2332',
+  orange: '#ff6b35',
+  red: '#ef4444',
+  white: '#ffffff',
+  muted: '#9aa1a9',
+  mutedLight: '#cbd5e1',
+  card: '#1e293b',
+  cardLight: '#2d3748',
+  yellow: '#fbbf24',
+  neonYellow: '#fffb00',
+  neonYellowGlow: 'rgba(255, 251, 0, 0.5)',
+};
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f7f3ec' },
+  container: { flex: 1, backgroundColor: palette.darkBlue },
 
   headerRow: {
-    padding: 16,
+    padding: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingTop: 20,
   },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#0f1724' },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: palette.white, letterSpacing: 0.5 },
 
   formRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    gap: 8,
-    marginBottom: 8,
+    paddingHorizontal: 20,
+    gap: 10,
+    marginBottom: 16,
   },
   input: {
-    backgroundColor: '#fff',
-    padding: 10,
-    borderRadius: 8,
-    marginRight: 8,
+    backgroundColor: palette.card,
+    padding: 14,
+    borderRadius: 16,
     flex: 1,
     borderWidth: 1,
-    borderColor: '#e6e2d9',
+    borderColor: palette.neonYellow,
+    color: palette.white,
+    fontSize: 15,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   addBtn: {
-    backgroundColor: '#0f1724',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    backgroundColor: palette.orange,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: palette.neonYellow,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  addBtnText: { color: '#fff', fontWeight: '700' },
+  addBtnText: { color: palette.white, fontWeight: '700', fontSize: 15 },
 
   importBtn: {
-    backgroundColor: '#c59d5f',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    backgroundColor: palette.card,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
     marginRight: 8,
+    borderWidth: 1,
+    borderColor: palette.neonYellow,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  importText: { color: '#0f1724', fontWeight: '700' },
+  importText: { color: palette.white, fontWeight: '700', fontSize: 13 },
 
   refreshBtn: {
-    backgroundColor: '#fff',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    backgroundColor: palette.card,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#e6e2d9',
+    borderColor: palette.neonYellow,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  refreshText: { color: '#0f1724', fontWeight: '700' },
+  refreshText: { color: palette.white, fontWeight: '700', fontSize: 13 },
 
   itemRow: {
-    backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 10,
+    backgroundColor: palette.card,
+    padding: 16,
+    borderRadius: 20,
+    marginBottom: 12,
+    marginHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: palette.neonYellow,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
-  name: { fontWeight: '700', color: '#0f1724', fontSize: 16 },
-  meta: { color: '#6b7280', marginTop: 4 },
+  name: { fontWeight: '700', color: palette.white, fontSize: 18 },
+  meta: { color: palette.mutedLight, marginTop: 6, fontSize: 14 },
 
   actionBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginLeft: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginLeft: 12,
   },
-  deleteText: { color: '#ef4444', fontWeight: '700' },
+  deleteText: { color: palette.red, fontWeight: '700', fontSize: 14 },
 });

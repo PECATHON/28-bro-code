@@ -1,6 +1,7 @@
 // server/routes/getVendors.js
 import { Router } from "express";
 import supabase from "../db.js";
+import supabaseAdmin from "../db_admin.js"; // Use admin client to bypass RLS and get ALL vendors
 
 const router = Router();
 
@@ -12,10 +13,14 @@ router.get("/items", async (req, res) => {
 
     console.log("📦 GET /api/vendors/items - Fetching all vendors from database");
 
-    let query = supabase
+    // Use admin client to bypass RLS and get ALL vendors
+    let query = supabaseAdmin
       .from("vendors")
-      .select("*")
+      .select("*", { count: 'exact' }) // Get exact count
       .order("created_at", { ascending: false });
+    
+    // Set high limit to fetch all vendors (Supabase default is 1000, but we want all)
+    query = query.limit(10000);
 
     // optional filters
     if (owner_id) query = query.eq("owner_id", owner_id);
@@ -42,14 +47,20 @@ router.get("/items", async (req, res) => {
       query = query.or(`shop_name.ilike.%${search}%,owner_name.ilike.%${search}%,email.ilike.%${search}%`);
     }
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
 
     console.log("📦 Database query result:", {
-      count: data?.length || 0,
+      count: count || data?.length || 0,
+      returned: data?.length || 0,
       error: error?.message || null,
       vendor_ids: data?.map(v => v.id).join(", ") || "none",
-      vendor_names: data?.map(v => v.shop_name || v.owner_name || "Unknown").join(", ") || "none",
+      vendor_names: data?.map(v => v.shop_name || v.owner_name || v.name || "Unknown").join(", ") || "none",
     });
+    
+    // Log if we're missing vendors
+    if (count && count > (data?.length || 0)) {
+      console.warn(`⚠️ Total vendors in DB: ${count}, but only ${data?.length || 0} returned. This shouldn't happen with admin client.`);
+    }
 
     if (error) {
       console.error("❌ Error fetching vendors:", error);

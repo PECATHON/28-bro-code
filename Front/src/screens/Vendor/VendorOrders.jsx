@@ -1,5 +1,5 @@
 // src/screens/Vendor/VendorOrders.jsx
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, useContext, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,10 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { AuthContext } from '../../contexts/AuthContext';
+// DISABLED: Notification system hidden to avoid "No project id" error
+// import { notifyNewOrder, requestNotificationPermissions } from '../../services/notifications';
 
 const BACKEND_BASE = 'http://172.31.68.164:3000';
 
@@ -22,8 +25,14 @@ export default function VendorOrders({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(null);
+  const [previousOrderIds, setPreviousOrderIds] = useState(new Set());
 
-  const fetchOrders = async (isRefresh = false) => {
+  // DISABLED: Notification system hidden to avoid "No project id" error
+  // useEffect(() => {
+  //   requestNotificationPermissions();
+  // }, []);
+
+  const fetchOrders = useCallback(async (isRefresh = false) => {
     if (!vendorId) {
       console.warn('⚠️ No vendorId available');
       setLoading(false);
@@ -45,24 +54,64 @@ export default function VendorOrders({ navigation }) {
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ message: 'Failed to fetch orders' }));
         console.error('❌ Failed to fetch vendor orders:', errorData);
-        Alert.alert('Error', errorData.message || 'Failed to load orders');
+        if (!isRefresh) {
+          Alert.alert('Error', errorData.message || 'Failed to load orders');
+        }
         setOrders([]);
         return;
       }
 
       const data = await res.json();
-      console.log('📦 Vendor orders received from database:', data.orders?.length || 0);
-      console.log('📦 Order IDs:', data.orders?.map(o => o.id.substring(0, 8)).join(', ') || 'none');
-      setOrders(data.orders || []);
+      console.log('📦 Vendor orders API response:', data);
+      const fetchedOrders = data.orders || [];
+      console.log('📦 Vendor orders received from database:', fetchedOrders.length);
+      console.log('📦 Order IDs:', fetchedOrders.map(o => o.id?.substring(0, 8)).join(', ') || 'none');
+      console.log('📦 Full orders data:', JSON.stringify(fetchedOrders, null, 2));
+      
+      // Check for new orders and send notifications
+      const currentOrderIds = new Set(fetchedOrders.map(o => o.id));
+      const newOrders = fetchedOrders.filter(o => !previousOrderIds.has(o.id));
+      
+              if (newOrders.length > 0) {
+                console.log('🆕 New orders detected:', newOrders.length);
+                // DISABLED: Notification system hidden to avoid "No project id" error
+                // newOrders.forEach(order => {
+                //   const customerName = order.customer || 'Customer';
+                //   const total = order.total || 0;
+                //   const itemsCount = order.itemsCount || order.items?.length || 0;
+                //   console.log('📱 Sending new order notification to vendor:', order.id, customerName, `₹${total.toFixed(2)}`);
+                //   notifyNewOrder(order.id, customerName, total);
+                // });
+                
+                // Show alert for new orders (only if not initial load)
+                newOrders.forEach(order => {
+                  const customerName = order.customer || 'Customer';
+                  const total = order.total || 0;
+                  const itemsCount = order.itemsCount || order.items?.length || 0;
+                  if (previousOrderIds.size > 0) {
+                    Alert.alert(
+                      'New Order! 📦',
+                      `New order from ${customerName}\n${itemsCount} item(s) • ₹${total.toFixed(2)}`,
+                      [{ text: 'View Orders', onPress: () => {} }]
+                    );
+                  }
+                });
+              }
+      
+      // Update previous order IDs
+      setPreviousOrderIds(currentOrderIds);
+      setOrders(fetchedOrders);
     } catch (error) {
       console.error('❌ Error fetching vendor orders:', error);
-      Alert.alert('Error', 'Could not load orders. Check your connection.');
+      if (!isRefresh) {
+        Alert.alert('Error', 'Could not load orders. Check your connection.');
+      }
       setOrders([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [vendorId, orders]);
 
   // Initial fetch on mount
   useEffect(() => {
@@ -70,25 +119,24 @@ export default function VendorOrders({ navigation }) {
   }, [vendorId]);
 
   // Real-time: Refresh when screen comes into focus
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
+  useFocusEffect(
+    useCallback(() => {
       console.log('🔄 VendorOrders focused - refreshing orders from database');
       fetchOrders(true);
-    });
-    return unsubscribe;
-  }, [navigation, vendorId]);
+    }, [fetchOrders])
+  );
 
-  // Real-time: Auto-refresh every 30 seconds when screen is active
+  // Real-time: Auto-refresh every 15 seconds when screen is active (more frequent for vendors)
   useEffect(() => {
     if (!vendorId) return;
 
     const interval = setInterval(() => {
-      console.log('🔄 Auto-refreshing vendor orders (30s interval)');
+      console.log('🔄 Auto-refreshing vendor orders (15s interval)');
       fetchOrders(true);
-    }, 30000); // Refresh every 30 seconds
+    }, 15000); // Refresh every 15 seconds for real-time updates
 
     return () => clearInterval(interval);
-  }, [vendorId]);
+  }, [vendorId, fetchOrders]);
 
   const onRefresh = () => {
     console.log('🔄 Manual refresh triggered');
@@ -112,6 +160,7 @@ export default function VendorOrders({ navigation }) {
         body: JSON.stringify({
           status: newStatus,
           vendorId: vendorId,
+          notifyStudent: true, // Always notify student on status change
         }),
       });
 
@@ -120,6 +169,8 @@ export default function VendorOrders({ navigation }) {
         throw new Error(errorData.message || 'Failed to update order status');
       }
 
+      const result = await res.json();
+      
       // Update local state
       setOrders(prevOrders =>
         prevOrders.map(order =>
@@ -127,7 +178,19 @@ export default function VendorOrders({ navigation }) {
         )
       );
 
-      Alert.alert('Success', 'Order status updated');
+      // Show success message based on status
+      const statusMessages = {
+        'preparing': 'Order is now under process. Student has been notified.',
+        'ready': 'Order is prepared and ready. Student has been notified.',
+        'completed': 'Order completed! Student has been notified.',
+        'cancelled': 'Order has been rejected. Student has been notified.',
+      };
+      
+      const message = statusMessages[newStatus] || 'Order status updated. Student has been notified.';
+      Alert.alert('Status Updated ✅', message, [{ text: 'OK' }]);
+      
+      // Refresh orders to get latest data
+      setTimeout(() => fetchOrders(true), 500);
     } catch (error) {
       console.error('Error updating order status:', error);
       Alert.alert('Error', error.message || 'Could not update order status');
@@ -145,11 +208,13 @@ export default function VendorOrders({ navigation }) {
   function getStatusColor(status) {
     switch (status) {
       case 'confirmed':
+        return '#3b82f6'; // Blue
       case 'preparing':
         return '#f59e0b'; // Orange
       case 'ready':
+        return '#10b981'; // Green
       case 'completed':
-        return '#16a34a'; // Green
+        return '#16a34a'; // Dark Green
       case 'cancelled':
         return '#ef4444'; // Red
       default:
@@ -162,13 +227,13 @@ export default function VendorOrders({ navigation }) {
       case 'confirmed':
         return 'Confirmed';
       case 'preparing':
-        return 'Preparing';
+        return 'Under Process';
       case 'ready':
-        return 'Ready';
+        return 'Prepared';
       case 'completed':
         return 'Completed';
       case 'cancelled':
-        return 'Cancelled';
+        return 'Rejected';
       default:
         return status;
     }
@@ -181,7 +246,7 @@ export default function VendorOrders({ navigation }) {
           <Text style={styles.title}>Orders</Text>
         </View>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color="#0f1724" />
+          <ActivityIndicator size="large" color="#ff6b35" />
         </View>
       </SafeAreaView>
     );
@@ -208,8 +273,12 @@ export default function VendorOrders({ navigation }) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         renderItem={({ item }) => {
           const isUpdating = updatingStatus === item.id;
-          const canMarkReady = item.status === 'confirmed' || item.status === 'preparing';
+          // Status flow: confirmed -> preparing -> ready -> completed
+          // Can also reject at any time
+          const canMarkPreparing = item.status === 'confirmed';
+          const canMarkReady = item.status === 'preparing';
           const canMarkCompleted = item.status === 'ready';
+          const canReject = item.status !== 'cancelled' && item.status !== 'completed';
 
           return (
             <View style={styles.orderCard}>
@@ -233,22 +302,37 @@ export default function VendorOrders({ navigation }) {
                 )}
               </View>
 
-              <View style={{ alignItems: 'flex-end' }}>
+              <View style={{ alignItems: 'flex-end', minWidth: 120 }}>
                 <Text style={styles.orderTotal}>₹{item.total.toFixed(2)}</Text>
                 <Text style={[styles.status, { color: getStatusColor(item.status) }]}>
                   {getStatusLabel(item.status)}
                 </Text>
 
+                {/* Status Action Buttons */}
+                {canMarkPreparing && (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionBtnPreparing, isUpdating && styles.actionBtnDisabled]}
+                    onPress={() => changeStatus(item.id, 'preparing')}
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.actionText}>Under Process</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+
                 {canMarkReady && (
                   <TouchableOpacity
-                    style={[styles.actionBtn, isUpdating && styles.actionBtnDisabled]}
+                    style={[styles.actionBtn, styles.actionBtnReady, isUpdating && styles.actionBtnDisabled]}
                     onPress={() => changeStatus(item.id, 'ready')}
                     disabled={isUpdating}
                   >
                     {isUpdating ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                      <Text style={styles.actionText}>Mark Ready</Text>
+                      <Text style={styles.actionText}>Mark Prepared</Text>
                     )}
                   </TouchableOpacity>
                 )}
@@ -266,15 +350,42 @@ export default function VendorOrders({ navigation }) {
                     )}
                   </TouchableOpacity>
                 )}
+
+                {canReject && (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionBtnReject, isUpdating && styles.actionBtnDisabled]}
+                    onPress={() => {
+                      Alert.alert(
+                        'Reject Order',
+                        'Are you sure you want to reject this order?',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Reject',
+                            style: 'destructive',
+                            onPress: () => changeStatus(item.id, 'cancelled')
+                          }
+                        ]
+                      );
+                    }}
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.actionText}>Reject</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           );
         }}
         ListEmptyComponent={
-          <View style={{ padding: 40, alignItems: 'center' }}>
-            <Text style={{ color: '#6b7280', fontSize: 16 }}>No orders yet</Text>
-            <Text style={{ color: '#9aa1a9', marginTop: 8 }}>Orders will appear here when customers place them</Text>
-          </View>
+                  <View style={{ padding: 40, alignItems: 'center' }}>
+                    <Text style={{ color: '#cbd5e1', fontSize: 16, fontWeight: '600' }}>No orders yet</Text>
+                    <Text style={{ color: '#9aa1a9', marginTop: 8, fontSize: 14 }}>Orders will appear here when customers place them</Text>
+                  </View>
         }
       />
     </SafeAreaView>
@@ -331,8 +442,17 @@ const styles = StyleSheet.create({
     minWidth: 100,
     alignItems: 'center',
   },
+  actionBtnPreparing: {
+    backgroundColor: '#f59e0b', // Orange
+  },
+  actionBtnReady: {
+    backgroundColor: '#10b981', // Green
+  },
   actionBtnComplete: {
-    backgroundColor: '#16a34a',
+    backgroundColor: '#16a34a', // Dark Green
+  },
+  actionBtnReject: {
+    backgroundColor: '#ef4444', // Red
   },
   actionBtnDisabled: {
     opacity: 0.6,

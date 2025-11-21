@@ -170,9 +170,29 @@ export default function StudentRegister({ navigation }) {
     <View style={styles.card}>
       <Text style={styles.title}>Student Registration</Text>
 
-      <TextInput placeholder="Full Name" value={name} onChangeText={setName} style={styles.input} />
-      <TextInput placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" style={styles.input} />
-      <TextInput placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} style={styles.input} />
+      <TextInput 
+        placeholder="Full Name" 
+        placeholderTextColor={palette.mutedLight}
+        value={name} 
+        onChangeText={setName} 
+        style={styles.input} 
+      />
+      <TextInput 
+        placeholder="Email" 
+        placeholderTextColor={palette.mutedLight}
+        value={email} 
+        onChangeText={setEmail} 
+        autoCapitalize="none" 
+        style={styles.input} 
+      />
+      <TextInput 
+        placeholder="Password" 
+        placeholderTextColor={palette.mutedLight}
+        secureTextEntry 
+        value={password} 
+        onChangeText={setPassword} 
+        style={styles.input} 
+      />
 
       <TouchableOpacity style={styles.btn} onPress={onRegister} disabled={loading}>
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Register</Text>}
@@ -182,48 +202,78 @@ export default function StudentRegister({ navigation }) {
 }
 
 const palette = {
-  cream: "#f7f3ec",
-  navy: "#0f1724",
-  gold: "#c59d5f",
-  muted: "#6b7280"
+  darkBlue: '#0f1724',
+  darkBlueLight: '#1a2332',
+  orange: '#ff6b35',
+  red: '#ef4444',
+  white: '#ffffff',
+  muted: '#9aa1a9',
+  mutedLight: '#cbd5e1',
+  card: '#1e293b',
+  cardLight: '#2d3748',
+  yellow: '#fbbf24',
+  neonYellow: '#fffb00',
+  neonYellowGlow: 'rgba(255, 251, 0, 0.5)',
 };
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: palette.card,
     margin: 20,
     marginTop: 10,
-    padding: 20,
-    borderRadius: 16,
-    elevation: 5,
+    padding: 24,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: palette.neonYellow,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 12,
   },
 
   title: {
     textAlign: "center",
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: "800",
-    color: palette.navy,
-    marginBottom: 12,
+    color: palette.white,
+    marginBottom: 20,
+    letterSpacing: 0.5,
   },
 
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-    backgroundColor: palette.cream,
+    borderColor: palette.neonYellow,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+    backgroundColor: palette.darkBlue,
+    color: palette.white,
+    fontSize: 16,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 6,
   },
 
   btn: {
-    backgroundColor: palette.navy,
-    padding: 12,
-    borderRadius: 12,
+    backgroundColor: palette.orange,
+    padding: 18,
+    borderRadius: 25,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: palette.neonYellow,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 
   btnText: {
-    color: "#fff",
+    color: palette.white,
     fontWeight: "700",
+    fontSize: 18,
   },
 });

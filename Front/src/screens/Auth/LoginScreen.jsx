@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
+import { LinearGradient } from 'expo-linear-gradient';
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AuthContext } from "../../contexts/AuthContext";
@@ -125,43 +126,144 @@ export default function LoginScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Login</Text>
+    <LinearGradient
+      colors={['#0f1724', '#1a2332', '#0f1724']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.container}
+    >
+      <View style={styles.content}>
+        {/* App Name & Team Branding */}
+        <View style={styles.branding}>
+          <Text style={styles.appName}>BiteBook</Text>
+          <Text style={styles.teamName}>by BroCode</Text>
+          <Text style={styles.welcomeText}>Welcome back! Order your favorite meals</Text>
+        </View>
 
-      <TextInput
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        style={styles.input}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        autoComplete="email"
-      />
+        <Text style={styles.title}>Login</Text>
 
-      <TextInput
-        placeholder="Password"
-        value={password}
-        secureTextEntry
-        onChangeText={setPassword}
-        style={styles.input}
-        autoComplete="password"
-      />
+        <TextInput
+          placeholder="Email"
+          placeholderTextColor={palette.mutedLight}
+          value={email}
+          onChangeText={setEmail}
+          style={styles.input}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          autoComplete="email"
+        />
 
-      <TouchableOpacity style={styles.btn} onPress={onLogin} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Login</Text>}
-      </TouchableOpacity>
+        <TextInput
+          placeholder="Password"
+          placeholderTextColor={palette.mutedLight}
+          value={password}
+          secureTextEntry
+          onChangeText={setPassword}
+          style={styles.input}
+          autoComplete="password"
+        />
 
-      <TouchableOpacity onPress={() => navigation.navigate("Register")} style={{ marginTop: 15 }}>
-        <Text style={{ color: "#007bff" }}>Don't have an account? Register</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity style={styles.btn} onPress={onLogin} disabled={loading}>
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Login</Text>}
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => navigation.navigate("Register")} style={{ marginTop: 20, alignItems: 'center' }}>
+          <Text style={{ color: palette.white, fontSize: 15, fontWeight: '600' }}>
+            Don't have an account? <Text style={{ fontWeight: '700', textDecorationLine: 'underline', color: palette.neonYellow }}>Register</Text>
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </LinearGradient>
   );
 }
 
+const palette = {
+  darkBlue: '#0f1724',
+  darkBlueLight: '#1a2332',
+  orange: '#ff6b35',
+  red: '#ef4444',
+  white: '#ffffff',
+  muted: '#9aa1a9',
+  mutedLight: '#cbd5e1',
+  card: '#1e293b',
+  cardLight: '#2d3748',
+  yellow: '#fbbf24',
+  neonYellow: '#fffb00',
+  neonYellowGlow: 'rgba(255, 251, 0, 0.5)',
+};
+
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 20 },
-  title: { fontSize: 24, fontWeight: "bold", marginBottom: 20, textAlign: "center" },
-  input: { borderWidth: 1, borderColor: "#ccc", padding: 12, borderRadius: 8, marginBottom: 12 },
-  btn: { backgroundColor: "#000", padding: 15, borderRadius: 8, alignItems: "center" },
-  btnText: { color: "#fff", fontWeight: "bold" },
+  container: { 
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    justifyContent: "center", 
+    padding: 24,
+  },
+  branding: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  appName: {
+    fontSize: 42,
+    fontWeight: '900',
+    color: palette.white,
+    letterSpacing: 2,
+    marginBottom: 8,
+  },
+  teamName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: palette.neonYellow,
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+  welcomeText: {
+    fontSize: 15,
+    color: palette.mutedLight,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  title: { 
+    fontSize: 32, 
+    fontWeight: "800", 
+    marginBottom: 32, 
+    textAlign: "center",
+    color: palette.white,
+    letterSpacing: 1,
+  },
+  input: { 
+    borderWidth: 1, 
+    borderColor: palette.neonYellow, 
+    padding: 16, 
+    borderRadius: 16, 
+    marginBottom: 16,
+    backgroundColor: palette.card,
+    color: palette.white,
+    fontSize: 16,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  btn: { 
+    backgroundColor: palette.orange, 
+    padding: 18, 
+    borderRadius: 25, 
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: palette.neonYellow,
+    shadowColor: palette.neonYellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  btnText: { 
+    color: palette.white, 
+    fontWeight: "700",
+    fontSize: 18,
+  },
 });
