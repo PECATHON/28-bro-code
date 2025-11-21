@@ -1,17 +1,67 @@
 // src/screens/Vendor/VendorHome.jsx
-import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import React, { useEffect, useState, useContext } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
+import { AuthContext } from '../../contexts/AuthContext';
+
+const BACKEND_BASE = 'http://172.31.68.164:3000';
 
 export default function VendorHome({ navigation }) {
+  const { user } = useContext(AuthContext);
+  const vendorId = user?.id;
   const [stats, setStats] = useState({
-    todaysOrders: 4,
-    pending: 2,
-    revenueToday: 820,
+    todaysOrders: 0,
+    pending: 0,
+    revenueToday: 0,
   });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // TODO: fetch vendor dashboard stats from API
-  }, []);
+    if (vendorId) {
+      fetchStats();
+    }
+  }, [vendorId]);
+
+  async function fetchStats() {
+    if (!vendorId) return;
+    
+    setLoading(true);
+    try {
+      // Fetch today's orders
+      const ordersRes = await fetch(`${BACKEND_BASE}/api/orders/vendor/${vendorId}`, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (ordersRes.ok) {
+        const ordersData = await ordersRes.json();
+        const orders = ordersData.orders || [];
+        
+        // Calculate stats
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const todayOrders = orders.filter(order => {
+          const orderDate = new Date(order.placedAt);
+          return orderDate >= today;
+        });
+        
+        const pendingOrders = orders.filter(order => 
+          order.status === 'confirmed' || order.status === 'preparing'
+        );
+        
+        const todayRevenue = todayOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+        
+        setStats({
+          todaysOrders: todayOrders.length,
+          pending: pendingOrders.length,
+          revenueToday: todayRevenue,
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching vendor stats:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -20,20 +70,26 @@ export default function VendorHome({ navigation }) {
         <Text style={styles.sub}>Welcome back — manage your shop</Text>
       </View>
 
-      <View style={styles.cardRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statNum}>{stats.todaysOrders}</Text>
-          <Text style={styles.statLabel}>Today's Orders</Text>
+      {loading ? (
+        <View style={{ padding: 40, alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#0f1724" />
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNum}>{stats.pending}</Text>
-          <Text style={styles.statLabel}>Pending</Text>
+      ) : (
+        <View style={styles.cardRow}>
+          <View style={styles.statCard}>
+            <Text style={styles.statNum}>{stats.todaysOrders}</Text>
+            <Text style={styles.statLabel}>Today's Orders</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statNum}>{stats.pending}</Text>
+            <Text style={styles.statLabel}>Pending</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statNum}>₹{stats.revenueToday.toFixed(0)}</Text>
+            <Text style={styles.statLabel}>Revenue</Text>
+          </View>
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNum}>₹{stats.revenueToday}</Text>
-          <Text style={styles.statLabel}>Revenue</Text>
-        </View>
-      </View>
+      )}
 
       <View style={{ padding: 16 }}>
         <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('VendorOrders')}>

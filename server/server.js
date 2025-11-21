@@ -11,6 +11,8 @@ import vendorRoutes from "./routes/auth/vendors.js";
 import vendorRegisterRoute from "./routes/vendor/registerVendor.js";
 import menuRoutes from "./routes/menu.js"; // Full CRUD menu routes
 import getVendors from "./routes/getVendors.js";
+import paymentRoutes from "./routes/payment.js";
+import ordersRoutes from "./routes/orders.js";
 
 
 const app = express();
@@ -44,6 +46,8 @@ app.use("/api/vendors", getVendors); // GET /api/vendors/items (MUST come before
 app.use("/api/vendors", vendorRoutes); // GET /api/vendors/:vendorId
 app.use("/api/menu", menuRoutes); // Full CRUD: GET, POST, PUT, DELETE, import, export, upload
 app.use("/api/vendor", vendorRegisterRoute);
+app.use("/api/payment", paymentRoutes); // Razorpay payment routes
+app.use("/api/orders", ordersRoutes); // Orders CRUD: GET /api/orders?userId=..., GET /api/orders/:orderId
 
 app.get("/health", (_, res) => {
   res.json({ status: "ok" });

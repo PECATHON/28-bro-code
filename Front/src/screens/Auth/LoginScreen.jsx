@@ -10,6 +10,7 @@ import {
   Alert,
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AuthContext } from "../../contexts/AuthContext";
 
 /**
@@ -31,9 +32,21 @@ export default function LoginScreen({ navigation }) {
 
   async function saveToken(key, value) {
     try {
-      await SecureStore.setItemAsync(key, value, { keychainAccessible: "WHEN_UNLOCKED" });
-    } catch (err) {
-      console.warn("SecureStore save error:", err);
+      // Try SecureStore first with keychainAccessible option for iOS
+      await SecureStore.setItemAsync(key, value, {
+        keychainAccessible: SecureStore.WHEN_UNLOCKED,
+      });
+      console.log(`✅ Token saved to SecureStore: ${key}`);
+    } catch (secureError) {
+      console.warn("⚠️ SecureStore save error (falling back to AsyncStorage):", secureError.message);
+      try {
+        // Fallback to AsyncStorage if SecureStore fails (common on iOS Simulator)
+        await AsyncStorage.setItem(key, value);
+        console.log(`✅ Token saved to AsyncStorage (fallback): ${key}`);
+      } catch (asyncError) {
+        console.error("❌ Both SecureStore and AsyncStorage failed:", asyncError);
+        // Don't throw - allow login to continue even if token storage fails
+      }
     }
   }
 

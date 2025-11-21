@@ -8,34 +8,126 @@ import {
   StyleSheet,
   Image,
   SafeAreaView,
-  ScrollView
+  ScrollView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CartContext } from '../../contexts/CartContext';
+import { vendorImages, FALLBACK_IMAGE } from '../../data/vendorImages';
+
+const BACKEND_BASE = 'http://172.31.68.164:3000';
 
 export default function VendorScreen({ route, navigation }) {
-  const { vendorId } = route.params || {};
-  const [vendor, setVendor] = useState(null);
+  const { vendor, vendorId } = route.params || {};
+  const [vendorData, setVendorData] = useState(vendor || null);
   const [menu, setMenu] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { addToCart, items } = useContext(CartContext);
 
-  useEffect(() => {
-    // Dummy data – replace with API later
-    setVendor({
-      id: vendorId || 'v1',
-      name: 'Canteen A',
-      rating: 4.3,
-      categories: ['Fast Food', 'Snacks'],
-      deliveryTime: 18,
-      image: 'https://placekitten.com/500/300',
-    });
+  // Get vendor ID from vendor object or direct vendorId param
+  const currentVendorId = vendor?.id || vendorId || vendorData?.id;
 
-    setMenu([
-      { id: 'm1', name: 'Veg Burger', price: 55, desc: 'Fresh bun, crispy patty', image: 'https://placekitten.com/400/280' },
-      { id: 'm2', name: 'Fries', price: 40, desc: 'Golden & crispy', image: 'https://placekitten.com/401/280' },
-      { id: 'm3', name: 'Cold Coffee', price: 60, desc: 'Chilled & creamy', image: 'https://placekitten.com/402/280' },
-    ]);
-  }, [vendorId]);
+  useEffect(() => {
+    if (currentVendorId) {
+      fetchVendorAndMenu();
+    } else if (vendor) {
+      // If vendor object passed, use it and just fetch menu
+      setVendorData(vendor);
+      fetchMenu(vendor.id);
+    } else {
+      setLoading(false);
+      Alert.alert('Error', 'Vendor information not available');
+    }
+  }, [currentVendorId, vendor]);
+
+  async function fetchVendorAndMenu() {
+    if (!currentVendorId) return;
+    
+    setLoading(true);
+    try {
+      // Fetch vendor details
+      if (!vendorData) {
+        const vendorsRes = await fetch(`${BACKEND_BASE}/api/vendors/items`, {
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const vendorsData = await vendorsRes.json();
+        const foundVendor = vendorsData.vendors?.find(v => v.id === currentVendorId);
+        if (foundVendor) {
+          setVendorData({
+            id: foundVendor.id,
+            name: foundVendor.shop_name || foundVendor.name || foundVendor.owner_name || 'Unknown Vendor',
+            description: foundVendor.description || '',
+            image: vendorImages[foundVendor.shop_name || foundVendor.name] || FALLBACK_IMAGE,
+            categories: ['General'],
+            avg_rating: foundVendor.avg_rating || 0,
+            time: 15,
+          });
+        }
+      }
+      
+      // Fetch menu
+      await fetchMenu(currentVendorId);
+    } catch (err) {
+      console.error('Error fetching vendor/menu:', err);
+      Alert.alert('Error', 'Failed to load vendor information');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchMenu(vId) {
+    try {
+      const res = await fetch(`${BACKEND_BASE}/api/menu/${vId}`, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (!res.ok) {
+        throw new Error('Failed to fetch menu');
+      }
+      
+      const menuData = await res.json();
+      // Transform menu items to match expected format
+      const transformedMenu = (menuData || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        price: parseFloat(item.price) || 0,
+        desc: item.description || '',
+        image: item.image_url || null,
+        category: item.category || 'General',
+        is_available: item.is_available !== false,
+      }));
+      
+      setMenu(transformedMenu);
+    } catch (err) {
+      console.error('Error fetching menu:', err);
+      setMenu([]);
+    }
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#f7f3ec', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#0f1724" />
+        <Text style={{ marginTop: 12, color: '#6b7280' }}>Loading vendor menu...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (!vendorData) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#f7f3ec', justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#6b7280', fontSize: 16 }}>Vendor not found</Text>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Text style={{ color: '#fff' }}>Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  const vendorImageSource = typeof vendorData.image === 'string' 
+    ? { uri: vendorData.image } 
+    : vendorData.image || FALLBACK_IMAGE;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f7f3ec' }}>
@@ -46,62 +138,81 @@ export default function VendorScreen({ route, navigation }) {
         </TouchableOpacity>
 
         {/* Banner */}
-        <Image source={{ uri: vendor?.image }} style={styles.banner} />
+        <Image source={vendorImageSource} style={styles.banner} />
 
         {/* Vendor Info */}
         <View style={styles.vendorInfoBox}>
-          <Text style={styles.vendorName}>{vendor?.name}</Text>
+          <Text style={styles.vendorName}>{vendorData.name}</Text>
 
           <View style={styles.row}>
             {/* Rating */}
             <View style={styles.ratingBadge}>
               <Ionicons name="star" size={14} color="#fff" />
-              <Text style={styles.ratingText}>{vendor?.rating}</Text>
+              <Text style={styles.ratingText}>{(vendorData.avg_rating || 0).toFixed(1)}</Text>
             </View>
 
             {/* Separator */}
             <Text style={styles.dot}>•</Text>
 
             {/* Categories */}
-            <Text style={styles.vendorMeta}>{vendor?.categories?.join(', ')}</Text>
+            <Text style={styles.vendorMeta}>{(vendorData.categories || ['General']).join(', ')}</Text>
 
             <Text style={styles.dot}>•</Text>
 
             {/* Delivery Time */}
-            <Text style={styles.vendorMeta}>{vendor?.deliveryTime} mins</Text>
+            <Text style={styles.vendorMeta}>{vendorData.time || 15} mins</Text>
           </View>
         </View>
 
         {/* Menu Title */}
-        <Text style={styles.menuTitle}>Menu</Text>
+        <Text style={styles.menuTitle}>Menu {menu.length > 0 && `(${menu.length})`}</Text>
 
         {/* Menu List */}
-        <FlatList
-          data={menu}
-          renderItem={({ item }) => (
-            <View style={styles.menuCard}>
-              <Image source={{ uri: item.image }} style={styles.menuImage} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.menuName}>{item.name}</Text>
-                <Text style={styles.menuDesc}>{item.desc}</Text>
-                <Text style={styles.menuPrice}>₹{item.price}</Text>
-                <TouchableOpacity
-                  style={styles.addBtn}
-                  onPress={() => addToCart({ ...item, vendorId: vendor.id })}
-                >
-                  <Text style={styles.addBtnText}>Add to Cart</Text>
-                </TouchableOpacity>
+        {menu.length === 0 ? (
+          <View style={{ padding: 20, alignItems: 'center' }}>
+            <Text style={{ color: '#6b7280' }}>No menu items available</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={menu.filter(item => item.is_available !== false)}
+            renderItem={({ item }) => (
+              <View style={styles.menuCard}>
+                {item.image ? (
+                  <Image source={{ uri: item.image }} style={styles.menuImage} />
+                ) : (
+                  <View style={[styles.menuImage, { backgroundColor: '#e6e2d9', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Ionicons name="restaurant" size={30} color="#9aa1a9" />
+                  </View>
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuName}>{item.name}</Text>
+                  {item.desc ? <Text style={styles.menuDesc}>{item.desc}</Text> : null}
+                  <Text style={styles.menuPrice}>₹{item.price.toFixed(2)}</Text>
+                  <TouchableOpacity
+                    style={[styles.addBtn, !item.is_available && styles.addBtnDisabled]}
+                    onPress={() => {
+                      if (item.is_available !== false) {
+                        addToCart({ ...item, vendorId: vendorData.id });
+                      }
+                    }}
+                    disabled={item.is_available === false}
+                  >
+                    <Text style={styles.addBtnText}>
+                      {item.is_available === false ? 'Unavailable' : 'Add to Cart'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          )}
-          keyExtractor={(i) => i.id}
-          scrollEnabled={false}
-        />
+            )}
+            keyExtractor={(i) => i.id}
+            scrollEnabled={false}
+          />
+        )}
       </ScrollView>
 
       {/* Sticky Cart Button */}
       {items.length > 0 && (
-        <TouchableOpacity style={styles.cartSticky} onPress={() => navigation.navigate('Cart')}>
+        <TouchableOpacity style={styles.cartSticky} onPress={() => navigation.navigate('StudentTabs', { screen: 'Cart' })}>
           <Text style={styles.cartStickyText}>{items.length} item(s) in cart • View Cart</Text>
         </TouchableOpacity>
       )}

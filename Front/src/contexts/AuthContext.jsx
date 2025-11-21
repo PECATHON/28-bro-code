@@ -45,9 +45,24 @@ export function AuthProvider({ children }) {
         console.warn("backend signout failed", err);
       }
 
-      // remove tokens saved in SecureStore
-      await SecureStore.deleteItemAsync("access_token");
-      await SecureStore.deleteItemAsync("refresh_token");
+      // remove tokens from both SecureStore and AsyncStorage (fallback)
+      try {
+        await SecureStore.deleteItemAsync("access_token");
+      } catch (e) {
+        console.warn("SecureStore delete access_token error:", e);
+      }
+      try {
+        await SecureStore.deleteItemAsync("refresh_token");
+      } catch (e) {
+        console.warn("SecureStore delete refresh_token error:", e);
+      }
+      // Also remove from AsyncStorage (in case fallback was used)
+      try {
+        await AsyncStorage.removeItem("access_token");
+        await AsyncStorage.removeItem("refresh_token");
+      } catch (e) {
+        console.warn("AsyncStorage delete tokens error:", e);
+      }
 
       // clear local user state
       await persistUser(null);

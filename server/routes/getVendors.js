@@ -5,9 +5,12 @@ import supabase from "../db.js";
 const router = Router();
 
 // GET /api/vendors/items?owner_id=...&status=approved&search=foo
+// Returns ALL vendors from database by default (real-time data)
 router.get("/items", async (req, res) => {
   try {
     const { owner_id, status, search } = req.query;
+
+    console.log("📦 GET /api/vendors/items - Fetching all vendors from database");
 
     let query = supabase
       .from("vendors")
@@ -41,23 +44,45 @@ router.get("/items", async (req, res) => {
 
     const { data, error } = await query;
 
+    console.log("📦 Database query result:", {
+      count: data?.length || 0,
+      error: error?.message || null,
+      vendor_ids: data?.map(v => v.id).join(", ") || "none",
+      vendor_names: data?.map(v => v.shop_name || v.owner_name || "Unknown").join(", ") || "none",
+    });
+
     if (error) {
-      console.error("Error fetching vendors:", error);
+      console.error("❌ Error fetching vendors:", error);
       return res.status(500).json({ message: "Failed to fetch vendors", error: error.message });
     }
 
-    // Normalize response - map to expected format
-    const normalized = (data || []).map(v => ({
-      id: v.id,
-      name: v.shop_name || v.name || "Unknown Vendor",
-      description: v.description || "",
-      owner_name: v.owner_name,
-      email: v.email,
-      phone: v.phone,
-      status: v.status || (v.is_approved ? "approved" : "pending"),
-      created_at: v.created_at,
-      ...v
-    }));
+    // Normalize response - merge name and shop_name consistently
+    // Priority: shop_name > name > owner_name
+    const normalized = (data || []).map(v => {
+      // Determine the primary name field (shop_name takes priority)
+      const primaryName = v.shop_name || v.name || v.owner_name || "Unknown Vendor";
+      
+      return {
+        id: v.id,
+        name: primaryName, // Unified name field for frontend
+        shop_name: v.shop_name || primaryName, // Always ensure shop_name exists
+        owner_name: v.owner_name || null,
+        description: v.description || "",
+        email: v.email || null,
+        phone: v.phone || null,
+        status: v.status || (v.is_approved ? "approved" : "pending"),
+        is_active: v.is_active !== undefined ? v.is_active : true,
+        created_at: v.created_at,
+        // Include all original fields for backward compatibility
+        ...v,
+        // Override with normalized values
+        name: primaryName,
+        shop_name: v.shop_name || primaryName,
+      };
+    });
+
+    console.log("✅ Returning", normalized?.length || 0, "vendors from database");
+    console.log("✅ Vendor names being returned:", normalized?.map(v => v.name).join(", ") || "none");
 
     return res.json({ vendors: normalized });
   } catch (err) {
